@@ -25,7 +25,7 @@ running `make smoke` against a tiny committed data subset (`data/tiny/`) — see
 
 Per-identity bias chart, per-identity CSV, and `metrics.json` are committed
 under [`docs/results/`](docs/results/). Training curves are on W&B
-([gvpatil-uw/toxic-classifier/runs/deq19wbw](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/deq19wbw)).
+([gvpatil-uw/toxic-classifier/runs/29bqsxc5](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/29bqsxc5)).
 
 The full design rationale and per-identity breakdown are in **[`report.md`](report.md)**.
 

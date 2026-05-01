@@ -258,7 +258,19 @@ max_len 128). Total wall-clock from cold start to evaluated test metrics:
 - training (4 epochs × ~217 s per epoch including val) — ~14.5 min
 - evaluation (194 640 held-out test rows) — ~10 s
 
-Validation AUC trajectory: **0.9320 → 0.9388 → 0.9416 → 0.9417** (converged).
+Per-epoch trajectory (logged to W&B as `train/epoch_{loss,acc}` and `val/{loss,auc,acc@0.5}`):
+
+| Epoch | train loss | train acc | val loss | val AUC | val acc@0.5 |
+|------:|-----------:|----------:|---------:|--------:|------------:|
+|     0 |     0.6794 |    0.8545 |   0.6189 |  0.9320 |      0.8300 |
+|     1 |     0.6024 |    0.8677 |   0.5887 |  0.9388 |      0.8709 |
+|     2 |     0.5637 |    0.8750 |   0.5708 |  0.9416 |      0.8680 |
+|     3 |     0.5300 |    0.8805 |   0.5954 |  0.9417 |      0.8861 |
+
+Val loss bottoms out at epoch 2 and ticks up at epoch 3 while val AUC plateaus
+— the classic "starting to overfit" signal. With more epochs we'd want early
+stopping on `val/loss` (or on the bias metric) rather than blindly running to
+the configured epoch count.
 
 **Test set** — union of `test_public_expanded.csv` and `test_private_expanded.csv`,
 n = 194,640:
@@ -296,7 +308,7 @@ where there isn't enough in-distribution signal to learn the
 identity-vs.-attack distinction. They are the priority targets for
 identity-aware re-weighting in §10.
 
-**W&B run** (training curves, configs, hardware): [`gvpatil-uw/toxic-classifier/runs/deq19wbw`](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/deq19wbw).
+**W&B run** (training curves, configs, hardware): [`gvpatil-uw/toxic-classifier/runs/29bqsxc5`](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/29bqsxc5) (`base-v2`).
 
 ## 8. Inference
 
