@@ -246,9 +246,57 @@ Smoke run example (1 epoch, ~1500 train rows, CPU, ~75 s wall-clock):
 ```
 
 These are intentionally weak — they prove the pipeline works
-end-to-end on tiny data, not that the model is good. A full training
-run on a single GPU with the `base.yaml` config should reach
-overall val AUC > 0.92 and a bias metric in the 0.85–0.90 range.
+end-to-end on tiny data, not that the model is good.
+
+### Full-training results (this repo)
+
+Trained from scratch on a single H100 NVL GPU with the committed
+`configs/base.yaml` (4 epochs, AMP, AdamW, ~10.9 M params, BPE vocab 30 k,
+max_len 128). Total wall-clock from cold start to evaluated test metrics:
+
+- prepare (BPE training + memmap encode of 1.8 M comments) — ~4.5 min
+- training (4 epochs × ~217 s per epoch including val) — ~14.5 min
+- evaluation (194 640 held-out test rows) — ~10 s
+
+Validation AUC trajectory: **0.9320 → 0.9388 → 0.9416 → 0.9417** (converged).
+
+**Test set** — union of `test_public_expanded.csv` and `test_private_expanded.csv`,
+n = 194,640:
+
+| Metric | Value |
+|---|---|
+| Overall ROC-AUC | **0.9425** |
+| Overall PR-AUC | 0.7073 |
+| Accuracy @ 0.5 | 0.8875 |
+| **Jigsaw bias metric** (the headline competition score) | **0.8652** |
+| Subgroup-AUC power-mean (p = -5) | 0.7769 |
+| BPSN-AUC power-mean (p = -5) | 0.8526 |
+| BNSP-AUC power-mean (p = -5) | 0.8889 |
+
+Per-identity Subgroup / BPSN / BNSP AUCs (the full breakdown is in
+`docs/results/per_identity.csv`):
+
+![Per-identity bias AUCs](docs/results/per_identity_aucs.png)
+
+**Reading the plot.** The model is broadly strong (Subgroup AUC ≥ 0.80
+on most identities), but a few subgroups stand out as weak:
+
+- `other_religion` Subgroup AUC = 0.54 — only 29 examples; small-sample
+  noise dominates this estimate.
+- `homosexual_gay_or_lesbian` and `bisexual` Subgroup AUC ≈ 0.78 — the
+  classic "identity-mention → toxic" failure mode that this dataset's
+  bias metric is designed to surface; the BNSP at 0.95 confirms the
+  model misses rather than over-predicts.
+- `intellectual_or_learning_disability` BNSP = 0.65 — small subgroup
+  (24 examples), and the model under-detects toxic content involving it.
+
+These match the intuition that with no pretrained weights and just 4
+epochs of training, the model's biggest gaps are on rare identities
+where there isn't enough in-distribution signal to learn the
+identity-vs.-attack distinction. They are the priority targets for
+identity-aware re-weighting in §10.
+
+**W&B run** (training curves, configs, hardware): [`gvpatil-uw/toxic-classifier/runs/deq19wbw`](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/deq19wbw).
 
 ## 8. Inference
 

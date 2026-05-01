@@ -1,0 +1,182 @@
+{
+  "split": "test",
+  "n": 194640,
+  "overall_auc": 0.9425058125005534,
+  "overall_pr_auc": 0.7073337293020225,
+  "accuracy@thr": 0.8875462392108509,
+  "threshold": 0.5,
+  "jigsaw_bias_metric": 0.8652129632705956,
+  "subgroup_auc_pmean": 0.7768920296531191,
+  "bpsn_auc_pmean": 0.8525649043660569,
+  "bnsp_auc_pmean": 0.888889106562653,
+  "per_identity": [
+    {
+      "name": "male",
+      "n_in_subgroup": 4386,
+      "subgroup_auc": 0.8884081342480279,
+      "bpsn_auc": 0.8888297156728334,
+      "bnsp_auc": 0.9469309363392979
+    },
+    {
+      "name": "female",
+      "n_in_subgroup": 5155,
+      "subgroup_auc": 0.8861884939625619,
+      "bpsn_auc": 0.8945047748704187,
+      "bnsp_auc": 0.9419111311167678
+    },
+    {
+      "name": "transgender",
+      "n_in_subgroup": 260,
+      "subgroup_auc": 0.8494230227976358,
+      "bpsn_auc": 0.8424750611642796,
+      "bnsp_auc": 0.9544648944094044
+    },
+    {
+      "name": "other_gender",
+      "n_in_subgroup": 0,
+      "subgroup_auc": NaN,
+      "bpsn_auc": NaN,
+      "bnsp_auc": NaN
+    },
+    {
+      "name": "heterosexual",
+      "n_in_subgroup": 141,
+      "subgroup_auc": 0.7127463054187192,
+      "bpsn_auc": 0.794783569436595,
+      "bnsp_auc": 0.9302140056842252
+    },
+    {
+      "name": "homosexual_gay_or_lesbian",
+      "n_in_subgroup": 1065,
+      "subgroup_auc": 0.7844360400444939,
+      "bpsn_auc": 0.8011037288943558,
+      "bnsp_auc": 0.9494413513634177
+    },
+    {
+      "name": "bisexual",
+      "n_in_subgroup": 34,
+      "subgroup_auc": 0.7830687830687831,
+      "bpsn_auc": 0.8564787830379438,
+      "bnsp_auc": 0.8985412488886939
+    },
+    {
+      "name": "other_sexual_orientation",
+      "n_in_subgroup": 1,
+      "subgroup_auc": NaN,
+      "bpsn_auc": 0.721387881926463,
+      "bnsp_auc": NaN
+    },
+    {
+      "name": "christian",
+      "n_in_subgroup": 4226,
+      "subgroup_auc": 0.8922547443798703,
+      "bpsn_auc": 0.9242024695300667,
+      "bnsp_auc": 0.9214336746336497
+    },
+    {
+      "name": "jewish",
+      "n_in_subgroup": 835,
+      "subgroup_auc": 0.8511425779219428,
+      "bpsn_auc": 0.8740377487918268,
+      "bnsp_auc": 0.9387577738344475
+    },
+    {
+      "name": "muslim",
+      "n_in_subgroup": 2040,
+      "subgroup_auc": 0.808683418635668,
+      "bpsn_auc": 0.8196672346801067,
+      "bnsp_auc": 0.9509056739920956
+    },
+    {
+      "name": "hindu",
+      "n_in_subgroup": 51,
+      "subgroup_auc": 0.8739130434782609,
+      "bpsn_auc": 0.9075041738342122,
+      "bnsp_auc": 0.9206848045728065
+    },
+    {
+      "name": "buddhist",
+      "n_in_subgroup": 53,
+      "subgroup_auc": 0.7763975155279503,
+      "bpsn_auc": 0.9085861188310062,
+      "bnsp_auc": 0.8814925097007867
+    },
+    {
+      "name": "atheist",
+      "n_in_subgroup": 280,
+      "subgroup_auc": 0.9066004780290495,
+      "bpsn_auc": 0.9312472516595158,
+      "bnsp_auc": 0.924002945502613
+    },
+    {
+      "name": "other_religion",
+      "n_in_subgroup": 29,
+      "subgroup_auc": 0.5357142857142857,
+      "bpsn_auc": 0.8712695021687059,
+      "bnsp_auc": 0.8379194481034137
+    },
+    {
+      "name": "black",
+      "n_in_subgroup": 1519,
+      "subgroup_auc": 0.780879682534713,
+      "bpsn_auc": 0.7811953540936188,
+      "bnsp_auc": 0.957574690372492
+    },
+    {
+      "name": "white",
+      "n_in_subgroup": 2452,
+      "subgroup_auc": 0.7977660345833136,
+      "bpsn_auc": 0.7905095624732077,
+      "bnsp_auc": 0.9609221447641735
+    },
+    {
+      "name": "asian",
+      "n_in_subgroup": 454,
+      "subgroup_auc": 0.8889066496163683,
+      "bpsn_auc": 0.92603893752021,
+      "bnsp_auc": 0.9167036516252792
+    },
+    {
+      "name": "latino",
+      "n_in_subgroup": 225,
+      "subgroup_auc": 0.9041018706333108,
+      "bpsn_auc": 0.8903257016033128,
+      "bnsp_auc": 0.9545289453859279
+    },
+    {
+      "name": "other_race_or_ethnicity",
+      "n_in_subgroup": 41,
+      "subgroup_auc": 0.865546218487395,
+      "bpsn_auc": 0.8632955805209203,
+      "bnsp_auc": 0.9582092741761861
+    },
+    {
+      "name": "physical_disability",
+      "n_in_subgroup": 9,
+      "subgroup_auc": 0.875,
+      "bpsn_auc": 0.9359827150903087,
+      "bnsp_auc": 0.9322316724707563
+    },
+    {
+      "name": "intellectual_or_learning_disability",
+      "n_in_subgroup": 24,
+      "subgroup_auc": 0.782608695652174,
+      "bpsn_auc": 0.9669726216712968,
+      "bnsp_auc": 0.647606449776468
+    },
+    {
+      "name": "psychiatric_or_mental_illness",
+      "n_in_subgroup": 511,
+      "subgroup_auc": 0.8712089447938504,
+      "bpsn_auc": 0.8649837209564321,
+      "bnsp_auc": 0.9470388554484196
+    },
+    {
+      "name": "other_disability",
+      "n_in_subgroup": 0,
+      "subgroup_auc": NaN,
+      "bpsn_auc": NaN,
+      "bnsp_auc": NaN
+    }
+  ]
+}

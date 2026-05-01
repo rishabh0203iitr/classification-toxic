@@ -14,7 +14,20 @@ A reviewer can verify the entire pipeline in **under 2 minutes on a CPU** by
 running `make smoke` against a tiny committed data subset (`data/tiny/`) — see
 [Quick start](#quick-start) below.
 
-The full design rationale is in **[`report.md`](report.md)**.
+**Full-training results** (single H100, 4 epochs, ~14.5 min training):
+
+| Metric                                | Value      |
+|---------------------------------------|------------|
+| Test overall ROC-AUC                  | **0.9425** |
+| Test PR-AUC                           | 0.7073     |
+| Test Accuracy @ 0.5                   | 0.8875     |
+| **Test Jigsaw bias metric**           | **0.8652** |
+
+Per-identity bias chart, per-identity CSV, and `metrics.json` are committed
+under [`docs/results/`](docs/results/). Training curves are on W&B
+([gvpatil-uw/toxic-classifier/runs/deq19wbw](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/deq19wbw)).
+
+The full design rationale and per-identity breakdown are in **[`report.md`](report.md)**.
 
 ---
 

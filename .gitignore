@@ -40,6 +40,9 @@ env/
 ENV/
 .python-version
 
+# Claude Code session artifacts
+.claude/
+
 # Jupyter
 .ipynb_checkpoints/
 

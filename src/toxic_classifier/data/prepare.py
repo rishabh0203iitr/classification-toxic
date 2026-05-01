@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Tokenizer ----------------------------------------------------------------
     tok_path = Path(t["path"])
-    if not tok_path.exists() or not t.get("train_if_missing", True):
+    if tok_path.exists() or not t.get("train_if_missing", True):
         log.info("Loading existing tokenizer from %s", tok_path)
         tokenizer = load_tokenizer(tok_path)
     else:
