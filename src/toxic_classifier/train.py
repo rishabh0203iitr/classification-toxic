@@ -138,16 +138,27 @@ def _make_loaders(cfg: dict, is_ddp: bool, rank: int, world: int) -> tuple[DataL
 
 
 @torch.no_grad()
-def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> dict:
+def evaluate(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    loss_fn: nn.Module | None = None,
+) -> dict:
     from sklearn.metrics import average_precision_score, roc_auc_score
 
     model.eval()
     ys, scores = [], []
+    loss_sum = 0.0
+    n_seen = 0
     for batch in loader:
         ids = batch["ids"].to(device, non_blocking=True)
         kpm = batch["key_padding_mask"].to(device, non_blocking=True)
         labels = batch["label"]
         logits = model(ids, key_padding_mask=kpm)
+        if loss_fn is not None:
+            loss_b = loss_fn(logits, labels.to(device, non_blocking=True))
+            loss_sum += float(loss_b.item()) * ids.size(0)
+            n_seen += ids.size(0)
         probs = torch.sigmoid(logits).detach().cpu().numpy()
         ys.append(labels.numpy())
         scores.append(probs)
@@ -161,6 +172,7 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> dict
         out["auc"] = float("nan")
         out["pr_auc"] = float("nan")
     out["acc@0.5"] = float(((s > 0.5).astype(np.float32) == y).mean()) if len(y) else float("nan")
+    out["loss"] = (loss_sum / n_seen) if (loss_fn is not None and n_seen > 0) else float("nan")
     return out
 
 
@@ -275,7 +287,8 @@ def main(argv: list[str] | None = None) -> int:
         if is_ddp and isinstance(train_loader.sampler, DistributedSampler):
             train_loader.sampler.set_epoch(epoch)
         model.train()
-        meter = AvgMeter()
+        loss_meter = AvgMeter()
+        acc_meter = AvgMeter()
         t0 = time.time()
         for batch in train_loader:
             ids = batch["ids"].to(device, non_blocking=True)
@@ -294,31 +307,46 @@ def main(argv: list[str] | None = None) -> int:
                 scaler.update()
                 optim.zero_grad(set_to_none=True)
                 sched.step()
-            meter.update(float(loss.item()) * cfg["train"]["grad_accum_steps"], k=ids.size(0))
+            loss_meter.update(float(loss.item()) * cfg["train"]["grad_accum_steps"], k=ids.size(0))
+            with torch.no_grad():
+                # Use logit > 0 as the 0.5-probability threshold for binary acc.
+                acc_b = ((logits > 0).float() == labels).float().mean().item()
+            acc_meter.update(float(acc_b), k=ids.size(0))
             global_step += 1
 
             if is_main_process() and global_step % cfg["train"]["log_every"] == 0:
                 lr = sched.get_last_lr()[0]
                 log.info(
-                    "epoch=%d step=%d loss=%.4f lr=%.2e",
-                    epoch, global_step, meter.avg, lr,
+                    "epoch=%d step=%d loss=%.4f acc=%.4f lr=%.2e",
+                    epoch, global_step, loss_meter.avg, acc_meter.avg, lr,
                 )
                 if wb is not None:
-                    wb.log({"train/loss": meter.avg, "train/lr": lr, "step": global_step})
+                    wb.log({
+                        "train/loss": loss_meter.avg,
+                        "train/acc": acc_meter.avg,
+                        "train/lr": lr,
+                        "step": global_step,
+                    })
 
         # Per-epoch validation -------------------------------------------------
         if is_main_process():
-            val = evaluate(model.module if is_ddp else model, val_loader, device)
+            val = evaluate(model.module if is_ddp else model, val_loader, device, loss_fn=loss_fn)
             dt = time.time() - t0
             log.info(
-                "epoch=%d done in %.1fs | train_loss=%.4f val_auc=%.4f val_pr_auc=%.4f n_val=%d",
-                epoch, dt, meter.avg, val["auc"], val["pr_auc"], val["n"],
+                "epoch=%d done in %.1fs | train_loss=%.4f train_acc=%.4f "
+                "val_loss=%.4f val_auc=%.4f val_pr_auc=%.4f val_acc=%.4f n_val=%d",
+                epoch, dt, loss_meter.avg, acc_meter.avg,
+                val["loss"], val["auc"], val["pr_auc"], val["acc@0.5"], val["n"],
             )
             if wb is not None:
                 wb.log(
                     {
                         f"val/{k}": v for k, v in val.items() if isinstance(v, (int, float))
-                    } | {"epoch": epoch}
+                    } | {
+                        "train/epoch_loss": loss_meter.avg,
+                        "train/epoch_acc": acc_meter.avg,
+                        "epoch": epoch,
+                    }
                 )
             metric = val.get("auc", float("nan"))
             if not math.isnan(metric) and metric > best:
