@@ -36,7 +36,7 @@ The full design rationale is in **[`report.md`](report.md)**.
 ├── tests/
 ├── Makefile
 ├── pyproject.toml  requirements.txt  requirements-dev.txt
-├── .github/workflows/ci.yml
+├── ci.yml.template            # drop into .github/workflows/ci.yml to enable CI
 ├── README.md
 └── report.md
 ```
