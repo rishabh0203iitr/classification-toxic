@@ -1,0 +1,82 @@
+run_name: base
+seed: 42
+
+data:
+  mode: memmap
+  raw_dir: data/full              # source CSVs for `prepare`
+  processed_dir: data/processed   # memmap output dir
+  splits_dir: data/splits         # split-index files
+  train_csv: data/full/train.csv  # used only by `prepare`
+  test_public_csv: data/full/test_public_expanded.csv
+  test_private_csv: data/full/test_private_expanded.csv
+  text_col: comment_text
+  target_col: target
+  toxic_threshold: 0.5
+  val_fraction: 0.05
+  identity_cols:
+    - male
+    - female
+    - transgender
+    - other_gender
+    - heterosexual
+    - homosexual_gay_or_lesbian
+    - bisexual
+    - other_sexual_orientation
+    - christian
+    - jewish
+    - muslim
+    - hindu
+    - buddhist
+    - atheist
+    - other_religion
+    - black
+    - white
+    - asian
+    - latino
+    - other_race_or_ethnicity
+    - physical_disability
+    - intellectual_or_learning_disability
+    - psychiatric_or_mental_illness
+    - other_disability
+
+tokenizer:
+  path: data/processed/tokenizer.json
+  vocab_size: 30000
+  train_if_missing: true
+  lowercase: true
+  max_len: 128
+
+model:
+  d_model: 256
+  n_heads: 4
+  n_layers: 4
+  dim_ff: 1024
+  dropout: 0.1
+  pool: cls
+
+train:
+  device: cuda
+  amp: true
+  epochs: 4
+  batch_size: 256
+  eval_batch_size: 512
+  num_workers: 4
+  lr: 5.0e-4
+  weight_decay: 0.01
+  warmup_steps: 1000
+  grad_clip: 1.0
+  grad_accum_steps: 1
+  log_every: 100
+  pos_weight: auto
+  use_weighted_sampler: false
+  ckpt_dir: artifacts/base/ckpt
+  best_metric: val_auc
+
+eval:
+  ckpt: artifacts/base/ckpt/best.pt
+  out_dir: artifacts/base/eval
+  threshold: 0.5
+
+wandb:
+  project: toxic-classifier
+  mode: online

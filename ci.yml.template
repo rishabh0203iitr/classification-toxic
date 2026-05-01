@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WANDB_MODE: disabled
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install (CPU torch + project)
+        run: |
+          python -m pip install --upgrade pip
+          # CPU-only torch wheel keeps installs fast in CI
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
+          python -m pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Unit tests (excluding smoke)
+        run: pytest -q --ignore=tests/test_smoke.py
+
+      - name: Smoke pipeline (CPU, ~75 s)
+        run: pytest -q tests/test_smoke.py

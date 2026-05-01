@@ -1,0 +1,63 @@
+run_name: smoke
+seed: 42
+
+data:
+  mode: raw                       # 'raw' (read CSV at __getitem__) or 'memmap' (pre-tokenised)
+  train_csv: data/tiny/train.csv
+  val_csv: data/tiny/val.csv
+  test_csv: data/tiny/test.csv
+  text_col: comment_text
+  target_col: target
+  toxic_threshold: 0.5
+  identity_cols:
+    - male
+    - female
+    - homosexual_gay_or_lesbian
+    - christian
+    - jewish
+    - muslim
+    - black
+    - white
+    - psychiatric_or_mental_illness
+
+tokenizer:
+  path: artifacts/smoke/tokenizer.json
+  vocab_size: 4096
+  train_if_missing: true
+  lowercase: true
+  max_len: 64
+
+model:
+  d_model: 64
+  n_heads: 2
+  n_layers: 2
+  dim_ff: 128
+  dropout: 0.1
+  pool: cls                       # 'cls' or 'mean'
+
+train:
+  device: cpu
+  amp: false
+  epochs: 1
+  batch_size: 32
+  eval_batch_size: 64
+  num_workers: 0
+  lr: 3.0e-4
+  weight_decay: 0.01
+  warmup_steps: 20
+  grad_clip: 1.0
+  grad_accum_steps: 1
+  log_every: 10
+  pos_weight: auto                # auto = N_neg / N_pos on the train set
+  use_weighted_sampler: false
+  ckpt_dir: artifacts/smoke/ckpt
+  best_metric: val_auc
+
+eval:
+  ckpt: artifacts/smoke/ckpt/best.pt
+  out_dir: artifacts/smoke/eval
+  threshold: 0.5
+
+wandb:
+  project: toxic-classifier
+  mode: disabled

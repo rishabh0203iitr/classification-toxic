@@ -1,0 +1,57 @@
+# Data — full + processed are not tracked. Only data/tiny/* and data/README.md are.
+data/full/
+data/processed/
+data/splits/
+*.bin
+*.npy
+*.npz
+*.parquet
+
+# ML / experiment outputs
+artifacts/
+checkpoints/
+runs/
+wandb/
+*.ckpt
+*.pt
+*.pth
+*.onnx
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.eggs/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Envs
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Secrets — defence-in-depth, never commit
+.env
+.env.*
+*.pem
+*.key
+secrets/
