@@ -141,10 +141,10 @@ make format          # ruff format
 ## Configuration
 
 All entrypoints take `--config <path.yaml>` and `--set k.k.k=value` overrides.
-For example:
+Repeat `--set` for each override:
 
 ```bash
-python -m toxic_classifier.train --config configs/base.yaml --set train.epochs=2 train.lr=1e-4
+python -m toxic_classifier.train --config configs/base.yaml --set train.epochs=2 --set train.lr=1e-4
 ```
 
 See `configs/{smoke,base}.yaml` for the full schema (data paths, tokenizer
