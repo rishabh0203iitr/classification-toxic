@@ -1,29 +1,26 @@
-# Project report — Toxic-comment classification with a from-scratch pre-LN Transformer
+# Project report — Toxic-comment classification
 
 ## 1. Problem framing
 
 The Jigsaw Unintended Bias in Toxicity Classification dataset is a corpus of
 ~1.8 M online comments labelled with continuous toxicity scores in `[0, 1]`,
 plus per-comment scores for 24 identity dimensions (e.g. `male`, `muslim`,
-`black`, `psychiatric_or_mental_illness`). The brief defines the binary
+`black`, `psychiatric_or_mental_illness`). We define the binary
 target as `toxic = (target >= 0.5)`.
 
-The "Unintended Bias" angle is the key to the dataset: a naïve classifier
+The "Unintended Bias" angle is a important point to note: a naïve classifier
 will score *any* comment that mentions a frequently-attacked identity
 (e.g. "muslim", "gay") as toxic, because in the training data those tokens
 co-occur with toxic content. The metric the competition uses, and the one we
 implement here, decomposes into *Subgroup AUC*, *Background-Positive
 Subgroup-Negative AUC*, and *Background-Negative Subgroup-Positive AUC* per
 identity, then combines them via a generalized power mean (p = -5) so that
-weakness on any single identity dominates the score. This pushes models away
-from the "mention an identity → predict toxic" shortcut.
+weakness on any single identity dominates the score. This helps detect a model that takes the
+"mention an identity → predict toxic" shortcut.
 
-The architectural constraint is "**no pretrained weights**". We build a
-small **pre-LayerNorm Transformer encoder** from scratch using
-`nn.Linear`, `nn.MultiheadAttention`, `nn.LayerNorm`. (We do use the
+We build a small **pre-LayerNorm Transformer encoder** from scratch using the 
 HuggingFace `tokenizers` library to *train* a BPE vocabulary on the Jigsaw
-training text — no pretrained vocabulary is loaded; the trainer is just a
-fast implementation of standard BPE.)
+training text.
 
 ## 2. Data analysis
 
@@ -41,9 +38,7 @@ the union of `test_public_expanded.csv` + `test_private_expanded.csv`
 **Target.** Hyper-skewed: `mean=0.103, median=0, q95=0.6`. **70 %** of rows
 are exactly 0; **8.0 %** are `target ≥ 0.5` (the binary positives); ~11.5 %
 sit in the disagreement zone `[0.3, 0.7]` where annotators split. Decisions:
-`pos_weight ≈ 11.5` in `BCEWithLogitsLoss` (auto-computed); the disagreement
-band is a hard floor on accuracy and motivates the future-work
-sample-weighting hook.
+`pos_weight ≈ 11.5` in `BCEWithLogitsLoss`.
 
 **Identity ↔ toxicity** — the bias problem in numbers. Toxic-rate among
 comments *mentioning* each identity, vs. the 8 % base rate:
@@ -56,10 +51,8 @@ comments *mentioning* each identity, vs. the 8 % base rate:
 | muslim                    |                  23 % |  2.8× |
 | transgender               |                  21 % |  2.7× |
 
-A bag-of-words classifier that fires on these tokens looks accurate and
-fails BPSN catastrophically. **Decision** → adopt the official Jigsaw
-bias-aware metric with `p = -5` power-mean (`metrics.py`) so the worst
-subgroup dominates the score.
+A bag-of-words classifier that uses on these tokens might look accurate but will
+fail catastrophically.
 
 ![Toxicity rate by identity mention](docs/results/eda/identity_tox_rate.png)
 
@@ -85,17 +78,9 @@ axes that would make good auxiliary heads (future work).
 **Train vs test drift.** Positive rates almost identical (8.00 % vs
 7.94 %). Most identity mention rates within ±10 %; the only large outliers
 are `intellectual_or_learning_disability` (2.4× more frequent in test) and
-`atheist` (1.9×). **Decision** → no class-prior correction needed;
-rare-identity per-AUCs will be noisy but not systematically biased.
+`atheist` (1.9×).
 
-**Annotator counts.** Median 4 toxicity annotators per row, so `target`
-granularity ≈ 0.25 — comments with `target = 0.5` had a coin-flip among
-4 annotators. **Decision** → keep all training rows for now, but flag
-sample-weighting by `toxicity_annotator_count` as the highest-ROI label-noise
-mitigation in §10.
-
-**Time span.** 2015-09-29 to 2017-11-11; 76 % of rows from 2017. The
-dataset is a frozen historical snapshot — flagged in §11 limitations.
+**Annotator counts.** Median 4 toxicity annotators per row
 
 ## 3. Splitting strategy
 
@@ -111,7 +96,7 @@ vector that combines:
 
 We use `iterstrat.MultilabelStratifiedShuffleSplit` for this. We chose
 multi-label-aware stratification rather than single-label because the val
-set is ultimately *evaluated* per-identity — and single-label stratification
+set is ultimately *evaluated* per-identity and single-label stratification
 on the toxic label leaves rare-identity subgroup sizes to chance.
 
 A unit test (`tests/test_split.py`) asserts no row-id overlap between
@@ -123,10 +108,6 @@ splits and that the split is reproducible from a seed.
 text only, with NFKC normalisation and lowercasing. Special tokens are
 `[PAD] (id=0)`, `[UNK] (id=1)`, `[CLS] (id=2)`. The CLS is prepended at
 encode time; pooling defaults to taking the CLS hidden state.
-
-We use the HuggingFace `tokenizers` library purely as a fast trainer —
-no pretrained vocabulary is loaded. The output is a single
-`tokenizer.json` we own.
 
 **On-the-fly vs. pre-processed — the engineering decision**.
 
@@ -142,27 +123,23 @@ Two paths are implemented:
 For full-scale training we pre-tokenise once (`make prepare`) and store
 the result as memmap. Reasoning:
 
-1. **CPU work per epoch goes to zero.** BPE on 1.8 M comments is
+1. **CPU and I/O work per epoch goes to zero.** BPE on 1.8 M comments is
    roughly 30–60 s/epoch even with `tokenizers`'s native parallelism;
    doing it inside `DataLoader` workers means the GPU waits.
-2. **Memmap is mmap'd; the OS page cache handles random access.**
-   No I/O queues, no per-worker file handles. Random sampling is
-   essentially memory access.
 3. **Disk footprint is tiny.** 1.8 M comments × avg ~80 tokens × 2 bytes
    (uint16) ≈ 280 MB — much less than the source CSV.
 4. **Determinism + reuse.** A given preprocessing run is reproducible
    from a config, so multi-run / multi-config training amortises the cost.
 
 The trade-off is a separate prepare step in the workflow (one extra make
-target). For the smoke test that doesn't matter — we use `mode=raw`
-there so the reviewer doesn't need a multi-step setup.
+target).
 
 The `collate_fn` dynamically pads each batch to the longest sequence in
 that batch (rather than always padding to `max_len`). On Jigsaw this is
 a 2–3× compute saving for short batches.
 
 Class imbalance is handled by `BCEWithLogitsLoss(pos_weight=N_neg/N_pos)`
-by default; `WeightedRandomSampler` is also available.
+by default.
 
 ## 5. Model architecture
 
@@ -192,9 +169,7 @@ norm at init, so gradient magnitudes don't blow up at deep layers
 during the first few hundred steps. For a 4-layer model, post-LN can
 work but tends to require careful warmup / temperature tuning.
 (See Xiong et al., "On Layer Normalization in the Transformer
-Architecture", ICML 2020.) For an interview project where reviewers
-should be able to reproduce the run on a single GPU without surprises,
-the robustness wins.
+Architecture", ICML 2020.)
 
 **Sizes:**
 
@@ -202,9 +177,6 @@ the robustness wins.
 |--------|---------|---------|----------|--------|---------|--------|--------|
 | smoke  |     64  |     2   |     2    |   128  |    64   | 4 096  | ~0.33 M |
 | base   |    256  |     4   |     4    |  1024  |   128   | 30 000 | ~10 M   |
-
-A 10 M-param model is small by NLP standards but appropriate when training
-from scratch on ~1.8 M comments with no transfer learning.
 
 **Initialisation**: `trunc_normal_(std=0.02)` on `Linear` weights and
 embeddings, zeros on biases, ones on `LayerNorm` weights — a common
@@ -232,7 +204,7 @@ recipe that matches the GPT/BERT lineage.
   "architecture file" the user must remember.
 - **Logging**: Weights & Biases (`wandb`). Step-level loss and LR;
   per-epoch val AUC, PR-AUC, accuracy. The smoke test sets
-  `WANDB_MODE=disabled` so reviewers don't need a W&B account.
+  `WANDB_MODE=disabled`.
 - **Multi-GPU**: `torchrun --nproc_per_node=N -m toxic_classifier.train`
   enables `DistributedDataParallel` and a `DistributedSampler`. Single-GPU
   remains the default and `base.yaml` is sized for it.
@@ -255,11 +227,10 @@ Headline numbers reported by `eval.py`:
 Why this metric, in plain language:
 - *Subgroup AUC* — does the model rank toxic vs. non-toxic *within* an
   identity? (Catches general weakness on a subgroup.)
-- *BPSN AUC* — given non-toxic comments mentioning S and toxic comments
-  not mentioning S, can the model rank them correctly? Tests for
-  **false positives** on S — the "every comment mentioning gay is
-  flagged" failure mode.
-- *BNSP AUC* — symmetric, tests for false negatives on S.
+- *BPSN AUC* — given non-toxic comments mentioning Subgroup and toxic comments
+  not mentioning Subgroup, can the model rank them correctly? Tests for
+  **false positives** on Subgroup.
+- *BNSP AUC* — symmetric, tests for false negatives on Subgroup.
 
 Outputs land in `artifacts/<run>/eval/`:
 
@@ -283,18 +254,9 @@ Smoke run example (1 epoch, ~1500 train rows, CPU, ~75 s wall-clock):
 }
 ```
 
-These are intentionally weak — they prove the pipeline works
-end-to-end on tiny data, not that the model is good.
-
 ### Full-training results (this repo)
 
-Trained from scratch on a single H100 NVL GPU with the committed
-`configs/base.yaml` (4 epochs, AMP, AdamW, ~10.9 M params, BPE vocab 30 k,
-max_len 128). Total wall-clock from cold start to evaluated test metrics:
-
-- prepare (BPE training + memmap encode of 1.8 M comments) — ~4.5 min
-- training (4 epochs × ~217 s per epoch including val) — ~14.5 min
-- evaluation (194 640 held-out test rows) — ~10 s
+Trained from scratch with the committed `configs/base.yaml` (4 epochs, AMP, AdamW, ~10.9 M params, BPE vocab 30 k, max_len 128).
 
 Per-epoch trajectory (logged to W&B as `train/epoch_{loss,acc}` and `val/{loss,auc,acc@0.5}`):
 
@@ -305,10 +267,7 @@ Per-epoch trajectory (logged to W&B as `train/epoch_{loss,acc}` and `val/{loss,a
 |     2 |     0.5637 |    0.8750 |   0.5708 |  0.9416 |      0.8680 |
 |     3 |     0.5300 |    0.8805 |   0.5954 |  0.9417 |      0.8861 |
 
-Val loss bottoms out at epoch 2 and ticks up at epoch 3 while val AUC plateaus
-— the classic "starting to overfit" signal. With more epochs we'd want early
-stopping on `val/loss` (or on the bias metric) rather than blindly running to
-the configured epoch count.
+Val loss bottoms out at epoch 2 and ticks up at epoch 3 while val AUC plateaus. 
 
 **Test set** — union of `test_public_expanded.csv` and `test_private_expanded.csv`,
 n = 194,640:
@@ -370,8 +329,6 @@ small FastAPI wrapper for an HTTP endpoint.
 - **Configs** are YAML, deliberately flat enough to be read at a glance.
   `--config configs/foo.yaml --set k.k=v` allows ad-hoc overrides without
   copy-pasting configs.
-- **Makefile** is the canonical entrypoint. The two single commands a
-  reviewer ever needs are `make smoke` and `make train`.
 - **Tests** (`pytest`) cover model forward shapes, padding-mask
   invariance, split reproducibility / no-leakage, the bias-metric on a
   perfect predictor, and an end-to-end smoke run. `tests/test_smoke.py`
