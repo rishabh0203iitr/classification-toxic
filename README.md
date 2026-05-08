@@ -11,8 +11,8 @@ a pre-tokenised memmap path), the model architecture, a single- or multi-GPU
 training loop, the official Jigsaw bias-aware evaluation, unit tests, and CI.
 
 A reviewer can verify the entire pipeline in **under 2 minutes on a CPU** by
-running `make smoke` against a tiny committed data subset (`data/tiny/`) — see
-[Quick start](#quick-start) below.
+running the smoke pipeline against a tiny committed data subset
+(`data/tiny/`) — see [Quick start](#quick-start) below.
 
 **Full-training results** (single H100, 8 epochs, ~30 min training; checkpoint selection by Jigsaw bias metric on val):
 
@@ -50,7 +50,6 @@ The full design rationale and per-identity breakdown are in **[`report.md`](repo
 │   ├── model/{transformer,classifier}.py
 │   ├── train.py  eval.py  infer.py  metrics.py  utils.py
 ├── tests/
-├── Makefile
 ├── pyproject.toml  requirements.txt  requirements-dev.txt
 ├── ci.yml.template            # drop into .github/workflows/ci.yml to enable CI
 ├── README.md
@@ -65,16 +64,19 @@ The full design rationale and per-identity breakdown are in **[`report.md`](repo
 git clone https://github.com/rishabh0203iitr/classification-toxic.git
 cd classification-toxic
 python -m pip install -e .
-make smoke
+
+# Train and evaluate on the committed data/tiny/ subset.
+WANDB_MODE=disabled python -m toxic_classifier.train --config configs/smoke.yaml
+WANDB_MODE=disabled python -m toxic_classifier.eval  --config configs/smoke.yaml
 ```
 
-`make smoke` trains a 333 k-parameter model for one epoch on the committed
-`data/tiny/` CSVs, evaluates it on `data/tiny/test.csv`, and writes
-`artifacts/smoke/eval/{metrics.json,per_identity.csv,per_identity_aucs.png}`.
+The smoke run trains a 333 k-parameter model for one epoch on the
+committed `data/tiny/` CSVs, evaluates it on `data/tiny/test.csv`, and
+writes `artifacts/smoke/eval/{metrics.json,per_identity.csv,per_identity_aucs.png}`.
 
-This is identical to the full pipeline — just with a smaller config, a 4 k
-vocab, sequence length 64, and one epoch — so it exercises every module
-(tokenizer training, dataset, model forward, training loop, eval, metrics).
+It exercises the same code paths as the full pipeline — tokenizer
+training, dataset, model forward, training loop, eval, and bias metric
+— with a smaller config (4 k vocab, sequence length 64, one epoch).
 
 ---
 
@@ -93,7 +95,7 @@ export WANDB_PROJECT="toxic-classifier"
 # To run without W&B: export WANDB_MODE=disabled
 
 # 4. (Optional) reproduce the dataset analysis — writes CSVs + plots to docs/results/eda/
-make eda
+python scripts/eda.py
 ```
 
 The committed EDA artefacts under [`docs/results/eda/`](docs/results/eda/)
@@ -106,14 +108,14 @@ distilled findings that drove modelling decisions.
 ## Full training pipeline (single GPU)
 
 ```bash
-# Pre-tokenise the full data once into data/processed/ (uint16 memmap)
-make prepare CONFIG=configs/base.yaml
+# Pre-tokenise the full data once into data/processed/ (uint16 memmap).
+python -m toxic_classifier.data.prepare --config configs/base.yaml
 
-# Train (4 epochs, AMP, AdamW, warmup + cosine LR)
-make train CONFIG=configs/base.yaml
+# Train (8 epochs, AMP, AdamW, warmup + cosine LR; checkpoint selection by val Jigsaw).
+python -m toxic_classifier.train --config configs/base.yaml
 
-# Evaluate the best checkpoint on the union of test_public_expanded + test_private_expanded
-make eval CONFIG=configs/base.yaml
+# Evaluate the best checkpoint on the union of test_public_expanded + test_private_expanded.
+python -m toxic_classifier.eval --config configs/base.yaml
 ```
 
 Outputs land in `artifacts/base/`:
@@ -155,9 +157,10 @@ The DataLoader sampler swaps to `DistributedSampler` automatically when
 ## Testing & linting
 
 ```bash
-make test            # pytest
-make lint            # ruff check
-make format          # ruff format
+pytest                          # all tests
+pytest --ignore=tests/test_smoke.py   # fast subset (skip the smoke run)
+ruff check .                    # lint
+ruff format .                   # format in place
 ```
 
 ---

@@ -148,7 +148,8 @@ Two `Dataset` implementations are provided:
   lengths, labels, raw targets, and identities.
 
 For full-scale training the pipeline pre-tokenises once via
-`make prepare` and stores the result as memmap. Justification:
+`python -m toxic_classifier.data.prepare --config configs/base.yaml`
+and stores the result as memmap. Justification:
 
 1. **Per-epoch CPU work is near-zero.** Tokenising 1.8 M comments
    inside `DataLoader` workers takes 30–60 seconds per epoch even with
@@ -163,8 +164,8 @@ For full-scale training the pipeline pre-tokenises once via
 4. **Reuse.** A given prepare run is fully determined by the config, so
    multi-run / multi-config training amortises the one-time cost.
 
-The trade-off is one additional pipeline step (`make prepare`) before
-`make train` for a fresh dataset.
+The trade-off is one additional pipeline step (the `prepare` command
+above) before `python -m toxic_classifier.train` on a fresh dataset.
 
 The `collate_fn` dynamically pads each batch to the longest sequence in
 that batch rather than to `max_len`, which avoids wasted attention
@@ -441,7 +442,8 @@ In rough priority order:
 - **Sample weighting by `toxicity_annotator_count`.** The plumbing for
   this is already in `prepare.py` and `train.py` behind
   `cfg.data.sample_weight_col` and is a no-op when unset; turning it
-  on requires only a config flip and a re-run of `make prepare`. The
+  on requires only a config flip and a re-run of
+  `python -m toxic_classifier.data.prepare`. The
   hypothesis is that high-confidence labels (10+ annotators) should
   contribute more gradient than low-agreement labels (median 4).
 - **Auxiliary heads on the sub-toxicity columns.** `prepare.py` and
