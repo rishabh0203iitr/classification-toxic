@@ -10,8 +10,7 @@ train/val/test split, an efficient data pipeline (with both an on-the-fly and
 a pre-tokenised memmap path), the model architecture, a single- or multi-GPU
 training loop, the official Jigsaw bias-aware evaluation, unit tests, and CI.
 
-A reviewer can verify the entire pipeline in **under 2 minutes on a CPU** by
-running the smoke pipeline against a tiny committed data subset
+Verify the entire pipeline on a CPU by running the smoke pipeline against a tiny committed data subset
 (`data/tiny/`) — see [Quick start](#quick-start) below.
 
 **Full-training results** (single H100, 8 epochs, ~30 min training; checkpoint selection by Jigsaw bias metric on val):
@@ -26,7 +25,7 @@ running the smoke pipeline against a tiny committed data subset
 
 Headline uses `min_subgroup_n=30` (matches val-time selection so we report
 the metric we optimise). Per-identity breakdown including the rare tail —
-which the headline filter excludes but doesn't hide — is in
+which the headline filter excludes is in
 [`docs/results/per_identity.csv`](docs/results/per_identity.csv) and the
 chart there. Training curves are on W&B
 ([gvpatil-uw/toxic-classifier/runs/b8vq4xyx](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/b8vq4xyx)).
