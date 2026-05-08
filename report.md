@@ -456,12 +456,6 @@ In rough priority order:
   encoder (e.g. BERT-base) on the same data and use it as a teacher
   for a no-pretraining student. This serves both as a quality ceiling
   and as a regularised training signal.
-- **Quantisation, ONNX export, and a latency benchmark.** Add INT8
-  dynamic quantisation of the linear layers, an `--bench` mode in
-  `infer.py`, and a small comparison table of throughput and latency
-  across precisions.
-- **Online-inference service.** Wrap `infer.py` in a FastAPI server
-  with a `/predict` endpoint and report p50 / p99 latency.
 - **Drift monitoring.** Online comment streams are non-stationary
   (vocabulary, slurs, and topic distributions all change over time).
   A scheduled job that re-evaluates the deployed model on a recent
