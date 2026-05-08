@@ -22,11 +22,10 @@ via a generalised power mean with exponent `p = -5`, which is dominated
 by the weakest identity. This penalises the
 "mention-an-identity → predict-toxic" shortcut directly.
 
-The model is a **pre-Layer-Normalisation Transformer encoder** built
+The model is a **pre-LayerNorm Transformer encoder** built
 from scratch (no pretrained weights). The HuggingFace `tokenizers`
 library is used only as a Byte-Pair Encoding (BPE) trainer over the
-Jigsaw training text — the vocabulary is learned from the dataset; no
-pretrained vocabulary is loaded.
+Jigsaw training text — the vocabulary is learned from the dataset.
 
 ## 2. Data analysis
 
@@ -432,9 +431,7 @@ In rough priority order:
 
 - **Larger model and longer schedule.** Increase to `d_model = 384`,
   6 layers, 8 heads, batch size 512 (with gradient accumulation if
-  needed), and 12 or more epochs. This stays within the no-pretrained-
-  weights constraint and is expected to narrow the gap to fine-tuned
-  pretrained baselines on the same dataset.
+  needed), and 12 or more epochs.
 - **Identity-aware loss re-weighting.** Up-weight rows that mention
   rare identities and rows that are non-toxic-but-identity-mentioning
   (the BPSN failure case). This was a winning recipe in the original
