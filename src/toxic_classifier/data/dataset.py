@@ -33,7 +33,7 @@ class RawJigsawDataset(Dataset):
         tokenizer_path: str | Path,
         max_len: int,
         text_col: str = "comment_text",
-        target_col: str | None = "target",
+        target_col: str = "target",
         identity_cols: Sequence[str] | None = None,
         toxic_threshold: float = 0.5,
     ) -> None:
@@ -47,7 +47,7 @@ class RawJigsawDataset(Dataset):
 
         # Pre-extract numpy arrays for speed.
         self.texts = self.df[text_col].fillna("").astype(str).to_numpy()
-        if target_col and target_col in self.df.columns:
+        if target_col in self.df.columns:
             self.targets = self.df[target_col].fillna(0).to_numpy(dtype=np.float32)
         elif "toxicity" in self.df.columns:
             # test_*_expanded use 'toxicity' instead of 'target'
@@ -93,7 +93,8 @@ class MemmapJigsawDataset(Dataset):
         self,
         prefix: str | Path,
         n_identities: int,
-        max_len: int,
+        n_aux: int = 0,
+        load_weights: bool = False,
     ) -> None:
         prefix = Path(prefix)
         self.lens = np.fromfile(prefix.with_suffix(".lens.bin"), dtype=np.int32)
@@ -110,7 +111,21 @@ class MemmapJigsawDataset(Dataset):
             ).reshape(-1, n_identities)
         else:
             self.idents = np.zeros((len(self.lens), 0), dtype=np.float32)
-        self.max_len = max_len
+        # Optional aux targets (cfg.data.auxiliary_targets) — file is written by
+        # prepare.py only when the list is non-empty.
+        self.n_aux = n_aux
+        if n_aux:
+            self.aux = np.fromfile(
+                prefix.with_suffix(".aux.bin"), dtype=np.float32
+            ).reshape(-1, n_aux)
+        else:
+            self.aux = None
+        # Optional per-row sample weight (cfg.data.sample_weight_col).
+        self.weights = (
+            np.fromfile(prefix.with_suffix(".weights.bin"), dtype=np.float32)
+            if load_weights
+            else None
+        )
 
     def __len__(self) -> int:
         return len(self.lens)
@@ -119,12 +134,17 @@ class MemmapJigsawDataset(Dataset):
         s = int(self.offsets[idx])
         L = int(self.lens[idx])
         ids = np.asarray(self.ids[s : s + L], dtype=np.int64)  # cast to long here
-        return {
+        item: dict[str, torch.Tensor] = {
             "ids": torch.from_numpy(ids),
             "label": torch.tensor(self.labels[idx], dtype=torch.float32),
             "target_raw": torch.tensor(self.targets[idx], dtype=torch.float32),
             "identities": torch.from_numpy(self.idents[idx]),
         }
+        if self.aux is not None:
+            item["aux_labels"] = torch.from_numpy(self.aux[idx])
+        if self.weights is not None:
+            item["weight"] = torch.tensor(self.weights[idx], dtype=torch.float32)
+        return item
 
 
 def collate_fn(batch: list[dict]) -> dict[str, torch.Tensor]:
@@ -140,17 +160,20 @@ def collate_fn(batch: list[dict]) -> dict[str, torch.Tensor]:
     pad_mask = ids.eq(PAD_ID)
     # Don't mask the CLS at position 0 even for completely-empty rows.
     pad_mask[:, 0] = False
-    labels = torch.stack([b["label"] for b in batch])
-    target_raw = torch.stack([b["target_raw"] for b in batch])
-    idents = torch.stack([b["identities"] for b in batch])
-    return {
+    out: dict[str, torch.Tensor] = {
         "ids": ids,
         "key_padding_mask": pad_mask,
-        "label": labels,
-        "target_raw": target_raw,
-        "identities": idents,
+        "label": torch.stack([b["label"] for b in batch]),
+        "target_raw": torch.stack([b["target_raw"] for b in batch]),
+        "identities": torch.stack([b["identities"] for b in batch]),
         "lengths": lengths,
     }
+    # Optional fields propagate only when every row carries them.
+    if all("aux_labels" in b for b in batch):
+        out["aux_labels"] = torch.stack([b["aux_labels"] for b in batch])
+    if all("weight" in b for b in batch):
+        out["weight"] = torch.stack([b["weight"] for b in batch])
+    return out
 
 
 def ensure_tokenizer_exists(
@@ -191,7 +214,8 @@ def make_dataset_from_cfg(cfg: dict, split: str) -> Dataset:
         return MemmapJigsawDataset(
             prefix=prefix,
             n_identities=len(d.get("identity_cols", [])),
-            max_len=t["max_len"],
+            n_aux=len(d.get("auxiliary_targets", []) or []),
+            load_weights=bool(d.get("sample_weight_col")),
         )
     else:
         raise ValueError(f"unknown data.mode {d['mode']!r}")

@@ -5,7 +5,7 @@ import logging
 import os
 import random
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -14,11 +14,17 @@ import torch
 import yaml
 
 
-def set_seed(seed: int) -> None:
+def set_seed(seed: int, deterministic: bool = False) -> None:
+    """Seed every RNG we use. If `deterministic`, also force CUDNN to pick
+    deterministic algorithms (slower; useful for exact-reproducibility runs)."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    if deterministic:
+        torch.use_deterministic_algorithms(True, warn_only=True)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def setup_logging(level: str = "INFO") -> logging.Logger:
@@ -74,12 +80,10 @@ def load_checkpoint(path: str | os.PathLike, map_location: str | torch.device = 
 class AvgMeter:
     n: int = 0
     s: float = 0.0
-    items: list[float] = field(default_factory=list)
 
     def update(self, v: float, k: int = 1) -> None:
         self.n += k
         self.s += v * k
-        self.items.append(v)
 
     @property
     def avg(self) -> float:

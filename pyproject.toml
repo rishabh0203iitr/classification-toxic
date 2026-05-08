@@ -53,7 +53,10 @@ src = ["src", "tests"]
 select = ["E", "F", "W", "I", "B", "UP", "N", "SIM"]
 # N806: ML code routinely uses B, L, D, H for batch / seq / dim / heads — keep that style.
 # E501: line length — handled by formatter, ignore in linter.
-ignore = ["E501", "N806"]
+# SIM115: data/prepare.py opens many sidecar files via an explicit
+#   _open_writers/_close_writers pair — a single `with` doesn't compose cleanly
+#   across a variable set of sidecar files (aux, weights are optional).
+ignore = ["E501", "N806", "SIM115"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

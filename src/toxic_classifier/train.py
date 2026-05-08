@@ -24,6 +24,7 @@ from torch.utils.data import DataLoader, DistributedSampler, WeightedRandomSampl
 
 from .data.dataset import collate_fn, ensure_tokenizer_exists, make_dataset_from_cfg
 from .data.tokenizer import PAD_ID, load_tokenizer
+from .metrics import compute_per_identity_aucs, jigsaw_bias_metric
 from .model.classifier import ToxicClassifier
 from .utils import (
     AvgMeter,
@@ -48,6 +49,16 @@ def _setup_ddp() -> tuple[bool, int, int]:
             torch.cuda.set_device(local_rank)
         return True, rank, world
     return False, 0, 1
+
+
+def _build_loss(cfg: dict, pos_weight: torch.Tensor | None) -> nn.Module:
+    """Loss factory hook. Today only 'bce' is wired; 'focal' is reserved
+    for future work (single-branch live edit). The signature is
+    `loss_fn(logits, labels)` so the training loop doesn't need to change."""
+    name = cfg["train"].get("loss", "bce")
+    if name == "bce":
+        return nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    raise ValueError(f"unknown train.loss {name!r}; expected 'bce'")
 
 
 def _make_optimizer(model: nn.Module, lr: float, weight_decay: float) -> torch.optim.Optimizer:
@@ -104,8 +115,12 @@ def _make_loaders(cfg: dict, is_ddp: bool, rank: int, world: int) -> tuple[DataL
         train_sampler = DistributedSampler(train_ds, num_replicas=world, rank=rank, shuffle=True)
         val_sampler = DistributedSampler(val_ds, num_replicas=world, rank=rank, shuffle=False)
     elif cfg["train"].get("use_weighted_sampler", False):
-        # Re-balance the rare positive class.
-        labels = np.array([float(train_ds[i]["label"]) for i in range(len(train_ds))])
+        # Re-balance the rare positive class. Datasets expose `.labels` as a
+        # contiguous numpy array; fall back to a per-row read only if absent.
+        labels = getattr(train_ds, "labels", None)
+        if labels is None:
+            labels = np.array([float(train_ds[i]["label"]) for i in range(len(train_ds))])
+        labels = np.asarray(labels, dtype=np.float32)
         n_pos = max(1, int(labels.sum()))
         n_neg = max(1, len(labels) - n_pos)
         w = np.where(labels > 0.5, 1.0 / n_pos, 1.0 / n_neg)
@@ -143,11 +158,23 @@ def evaluate(
     loader: DataLoader,
     device: torch.device,
     loss_fn: nn.Module | None = None,
+    identity_cols: list[str] | None = None,
+    min_subgroup_n: int = 1,
 ) -> dict:
+    """Compute val metrics. If `identity_cols` is given and the loader yields
+    `identities` per batch, also compute the Jigsaw bias-aware metric so it
+    can drive checkpoint selection.
+
+    `min_subgroup_n` filters out subgroups with too few examples in this
+    eval set. The Jigsaw bias metric uses a p=-5 power-mean per identity
+    family — one tiny noisy subgroup AUC can crush the score. For val-time
+    selection we'd rather skip those subgroups; the test-time eval keeps
+    the full table (set min_subgroup_n=1 there).
+    """
     from sklearn.metrics import average_precision_score, roc_auc_score
 
     model.eval()
-    ys, scores = [], []
+    ys, scores, idents = [], [], []
     loss_sum = 0.0
     n_seen = 0
     for batch in loader:
@@ -162,6 +189,8 @@ def evaluate(
         probs = torch.sigmoid(logits).detach().cpu().numpy()
         ys.append(labels.numpy())
         scores.append(probs)
+        if "identities" in batch:
+            idents.append(batch["identities"].numpy())
     y = np.concatenate(ys) if ys else np.zeros(0)
     s = np.concatenate(scores) if scores else np.zeros(0)
     out = {"n": int(len(y))}
@@ -173,6 +202,17 @@ def evaluate(
         out["pr_auc"] = float("nan")
     out["acc@0.5"] = float(((s > 0.5).astype(np.float32) == y).mean()) if len(y) else float("nan")
     out["loss"] = (loss_sum / n_seen) if (loss_fn is not None and n_seen > 0) else float("nan")
+    # Bias metric — only when an identity vector is available and we have
+    # enough class diversity for AUCs to be defined.
+    if identity_cols and idents and not math.isnan(out["auc"]):
+        idents_arr = np.concatenate(idents, axis=0)
+        per_id = compute_per_identity_aucs(
+            y, s, idents_arr, list(identity_cols),
+            min_examples=min_subgroup_n,
+        )
+        out["jigsaw"] = float(jigsaw_bias_metric(out["auc"], per_id))
+    else:
+        out["jigsaw"] = float("nan")
     return out
 
 
@@ -205,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = apply_overrides(load_config(args.config), args.overrides)
     log = setup_logging()
-    set_seed(cfg.get("seed", 42))
+    set_seed(cfg.get("seed", 42), deterministic=cfg["train"].get("deterministic", False))
 
     is_ddp, rank, world = _setup_ddp()
     device = device_from_cfg(cfg) if not is_ddp else torch.device(
@@ -260,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:
     pos_weight = _resolve_pos_weight(cfg, train_loader, device)
     if is_main_process() and pos_weight is not None:
         log.info("BCE pos_weight=%.3f", float(pos_weight.item()))
-    loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    loss_fn = _build_loss(cfg, pos_weight)
 
     optim = _make_optimizer(
         model.module if is_ddp else model,
@@ -296,7 +336,19 @@ def main(argv: list[str] | None = None) -> int:
             labels = batch["label"].to(device, non_blocking=True)
             with autocast(device_type="cuda", enabled=use_amp):
                 logits = model(ids, key_padding_mask=kpm)
-                loss = loss_fn(logits, labels)
+                if "weight" in batch:
+                    # Sample-weighted BCE: per-row weights from a configured
+                    # column (e.g. toxicity_annotator_count). pos_weight still
+                    # applies via loss_fn.pos_weight.
+                    weights = batch["weight"].to(device, non_blocking=True)
+                    elt = nn.functional.binary_cross_entropy_with_logits(
+                        logits, labels,
+                        pos_weight=loss_fn.pos_weight if hasattr(loss_fn, "pos_weight") else None,
+                        reduction="none",
+                    )
+                    loss = (elt * weights).sum() / weights.sum().clamp(min=1.0)
+                else:
+                    loss = loss_fn(logits, labels)
                 loss = loss / cfg["train"]["grad_accum_steps"]
             scaler.scale(loss).backward()
             if (global_step + 1) % cfg["train"]["grad_accum_steps"] == 0:
@@ -330,13 +382,21 @@ def main(argv: list[str] | None = None) -> int:
 
         # Per-epoch validation -------------------------------------------------
         if is_main_process():
-            val = evaluate(model.module if is_ddp else model, val_loader, device, loss_fn=loss_fn)
+            val = evaluate(
+                model.module if is_ddp else model,
+                val_loader,
+                device,
+                loss_fn=loss_fn,
+                identity_cols=cfg["data"].get("identity_cols", []),
+                min_subgroup_n=cfg["train"].get("val_min_subgroup_n", 30),
+            )
             dt = time.time() - t0
             log.info(
                 "epoch=%d done in %.1fs | train_loss=%.4f train_acc=%.4f "
-                "val_loss=%.4f val_auc=%.4f val_pr_auc=%.4f val_acc=%.4f n_val=%d",
+                "val_loss=%.4f val_auc=%.4f val_pr_auc=%.4f val_acc=%.4f val_jigsaw=%.4f n_val=%d",
                 epoch, dt, loss_meter.avg, acc_meter.avg,
-                val["loss"], val["auc"], val["pr_auc"], val["acc@0.5"], val["n"],
+                val["loss"], val["auc"], val["pr_auc"], val["acc@0.5"],
+                val.get("jigsaw", float("nan")), val["n"],
             )
             if wb is not None:
                 wb.log(
@@ -348,9 +408,17 @@ def main(argv: list[str] | None = None) -> int:
                         "epoch": epoch,
                     }
                 )
-            metric = val.get("auc", float("nan"))
-            if not math.isnan(metric) and metric > best:
-                best = metric
+            best_metric_name = cfg["train"].get("best_metric", "val_auc")
+            # Map the config string to the actual scalar to compare on. Default
+            # remains val_auc; "jigsaw" / "val_jigsaw" select the bias metric.
+            metric_for_selection = {
+                "val_auc": val["auc"],
+                "auc": val["auc"],
+                "jigsaw": val.get("jigsaw", float("nan")),
+                "val_jigsaw": val.get("jigsaw", float("nan")),
+            }.get(best_metric_name, val["auc"])
+            if not math.isnan(metric_for_selection) and metric_for_selection > best:
+                best = metric_for_selection
                 save_checkpoint(
                     ckpt_dir / "best.pt",
                     {
@@ -359,9 +427,13 @@ def main(argv: list[str] | None = None) -> int:
                         "val": val,
                         "epoch": epoch,
                         "global_step": global_step,
+                        "best_metric": best_metric_name,
                     },
                 )
-                log.info("Saved best ckpt → %s (val_auc=%.4f)", ckpt_dir / "best.pt", best)
+                log.info(
+                    "Saved best ckpt → %s (%s=%.4f)",
+                    ckpt_dir / "best.pt", best_metric_name, best,
+                )
             save_checkpoint(
                 ckpt_dir / "last.pt",
                 {

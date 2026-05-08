@@ -14,18 +14,18 @@ A reviewer can verify the entire pipeline in **under 2 minutes on a CPU** by
 running `make smoke` against a tiny committed data subset (`data/tiny/`) — see
 [Quick start](#quick-start) below.
 
-**Full-training results** (single H100, 4 epochs, ~14.5 min training):
+**Full-training results** (single H100, 8 epochs, ~30 min training; checkpoint selection by Jigsaw bias metric on val):
 
 | Metric                                | Value      |
 |---------------------------------------|------------|
-| Test overall ROC-AUC                  | **0.9425** |
-| Test PR-AUC                           | 0.7073     |
-| Test Accuracy @ 0.5                   | 0.8875     |
-| **Test Jigsaw bias metric**           | **0.8652** |
+| Test overall ROC-AUC                  | **0.9417** |
+| Test PR-AUC                           | 0.7020     |
+| Test Accuracy @ 0.5                   | 0.8807     |
+| **Test Jigsaw bias metric**           | **0.8473** |
 
 Per-identity bias chart, per-identity CSV, and `metrics.json` are committed
 under [`docs/results/`](docs/results/). Training curves are on W&B
-([gvpatil-uw/toxic-classifier/runs/29bqsxc5](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/29bqsxc5)).
+([gvpatil-uw/toxic-classifier/runs/b8vq4xyx](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/b8vq4xyx)).
 
 The full design rationale and per-identity breakdown are in **[`report.md`](report.md)**.
 
@@ -40,7 +40,6 @@ The full design rationale and per-identity breakdown are in **[`report.md`](repo
 │   ├── tiny/                  # ~1500/250/250-row CSVs committed to the repo
 │   ├── full/                  # the full Jigsaw CSVs (gitignored — see below)
 │   └── README.md              # how to fetch the full dataset
-├── notebooks/                 # 01_eda.ipynb (data analysis)
 ├── scripts/make_tiny_subset.py
 ├── src/toxic_classifier/
 │   ├── data/{tokenizer,split,dataset,prepare}.py

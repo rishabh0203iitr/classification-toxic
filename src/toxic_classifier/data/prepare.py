@@ -25,31 +25,46 @@ from .split import save_splits, stratified_train_val_split
 from .tokenizer import encode, load_tokenizer, train_tokenizer
 
 
-def _open_writers(out_prefix: Path, n_id: int):
+def _open_writers(out_prefix: Path, *, has_aux: bool, has_weights: bool):
     out_prefix.parent.mkdir(parents=True, exist_ok=True)
-    return {
+    w = {
         "ids": open(out_prefix.with_suffix(".ids.bin"), "wb"),
         "lens": open(out_prefix.with_suffix(".lens.bin"), "wb"),
         "labels": open(out_prefix.with_suffix(".labels.bin"), "wb"),
         "targets": open(out_prefix.with_suffix(".targets.bin"), "wb"),
         "idents": open(out_prefix.with_suffix(".idents.bin"), "wb"),
-        "n_id": n_id,
     }
+    if has_aux:
+        w["aux"] = open(out_prefix.with_suffix(".aux.bin"), "wb")
+    if has_weights:
+        w["weights"] = open(out_prefix.with_suffix(".weights.bin"), "wb")
+    return w
 
 
 def _close_writers(w: dict) -> None:
     for v in w.values():
-        if hasattr(v, "close"):
-            v.close()
+        v.close()
 
 
-def _write_row(w: dict, ids: list[int], label: float, target: float, idents: np.ndarray) -> None:
+def _write_row(
+    w: dict,
+    ids: list[int],
+    label: float,
+    target: float,
+    idents: np.ndarray,
+    aux: np.ndarray | None = None,
+    weight: float | None = None,
+) -> None:
     arr = np.asarray(ids, dtype=np.uint16)
     arr.tofile(w["ids"])
     np.array([len(arr)], dtype=np.int32).tofile(w["lens"])
     np.array([label], dtype=np.float32).tofile(w["labels"])
     np.array([target], dtype=np.float32).tofile(w["targets"])
     np.asarray(idents, dtype=np.float32).tofile(w["idents"])
+    if aux is not None:
+        np.asarray(aux, dtype=np.float32).tofile(w["aux"])
+    if weight is not None:
+        np.array([weight], dtype=np.float32).tofile(w["weights"])
 
 
 def _process_dataframe(
@@ -62,9 +77,12 @@ def _process_dataframe(
     identity_cols: list[str],
     toxic_threshold: float,
     max_len: int,
+    aux_cols: list[str] | None,
+    sample_weight_col: str | None,
     desc: str,
 ) -> int:
-    w = _open_writers(out_prefix, n_id=len(identity_cols))
+    aux_cols = aux_cols or []
+    w = _open_writers(out_prefix, has_aux=bool(aux_cols), has_weights=bool(sample_weight_col))
     n = len(df)
     texts = df[text_col].fillna("").astype(str).to_numpy()
 
@@ -85,11 +103,39 @@ def _process_dataframe(
         ],
         axis=1,
     ) if identity_cols else np.zeros((n, 0), dtype=np.float32)
+    if aux_cols:
+        aux_mat = np.stack(
+            [
+                df[c].fillna(0).to_numpy(dtype=np.float32)
+                if c in df.columns
+                else np.zeros(n, dtype=np.float32)
+                for c in aux_cols
+            ],
+            axis=1,
+        )
+    else:
+        aux_mat = None
+    if sample_weight_col:
+        weights = (
+            df[sample_weight_col].fillna(0).to_numpy(dtype=np.float32)
+            if sample_weight_col in df.columns
+            else np.ones(n, dtype=np.float32)
+        )
+    else:
+        weights = None
 
     written = 0
     for i in tqdm(range(n), desc=desc, dynamic_ncols=True):
         ids = encode(tokenizer, texts[i], max_len)
-        _write_row(w, ids, labels[i], targets[i], idents[i])
+        _write_row(
+            w,
+            ids,
+            labels[i],
+            targets[i],
+            idents[i],
+            aux=aux_mat[i] if aux_mat is not None else None,
+            weight=float(weights[i]) if weights is not None else None,
+        )
         written += 1
     _close_writers(w)
     return written
@@ -150,6 +196,9 @@ def main(argv: list[str] | None = None) -> int:
     save_splits(splits_dir, train_idx, val_idx)
     log.info("Saved split indices: train=%d, val=%d", len(train_idx), len(val_idx))
 
+    aux_cols = d.get("auxiliary_targets") or []
+    sample_weight_col = d.get("sample_weight_col") or None
+
     # Memmap dumps -------------------------------------------------------------
     _process_dataframe(
         df_train.iloc[train_idx],
@@ -160,6 +209,8 @@ def main(argv: list[str] | None = None) -> int:
         identity_cols=d["identity_cols"],
         toxic_threshold=d["toxic_threshold"],
         max_len=t["max_len"],
+        aux_cols=aux_cols,
+        sample_weight_col=sample_weight_col,
         desc="encode-train",
     )
     _process_dataframe(
@@ -171,6 +222,8 @@ def main(argv: list[str] | None = None) -> int:
         identity_cols=d["identity_cols"],
         toxic_threshold=d["toxic_threshold"],
         max_len=t["max_len"],
+        aux_cols=aux_cols,
+        sample_weight_col=sample_weight_col,
         desc="encode-val",
     )
     del df_train
@@ -188,6 +241,8 @@ def main(argv: list[str] | None = None) -> int:
         identity_cols=d["identity_cols"],
         toxic_threshold=d["toxic_threshold"],
         max_len=t["max_len"],
+        aux_cols=aux_cols,
+        sample_weight_col=sample_weight_col,
         desc="encode-test",
     )
     log.info("Done. processed=%s", proc_dir)

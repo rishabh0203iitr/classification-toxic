@@ -30,7 +30,7 @@ from .utils import (
 @torch.no_grad()
 def _predict(model, loader, device):
     model.eval()
-    ys, scores, idents, targets_raw = [], [], [], []
+    ys, scores, idents = [], [], []
     for batch in loader:
         ids = batch["ids"].to(device, non_blocking=True)
         kpm = batch["key_padding_mask"].to(device, non_blocking=True)
@@ -38,12 +38,10 @@ def _predict(model, loader, device):
         scores.append(torch.sigmoid(logits).cpu().numpy())
         ys.append(batch["label"].numpy())
         idents.append(batch["identities"].numpy())
-        targets_raw.append(batch["target_raw"].numpy())
     return (
         np.concatenate(ys) if ys else np.zeros(0),
         np.concatenate(scores) if scores else np.zeros(0),
         np.concatenate(idents, axis=0) if idents else np.zeros((0, 0)),
-        np.concatenate(targets_raw) if targets_raw else np.zeros(0),
     )
 
 
@@ -129,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     state = load_checkpoint(ckpt_path, map_location=device)
     model.load_state_dict(state["model"])
 
-    y, s, idents, _ = _predict(model, loader, device)
+    y, s, idents = _predict(model, loader, device)
     log.info("Predicted %d examples", len(y))
 
     from sklearn.metrics import average_precision_score, roc_auc_score

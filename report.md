@@ -256,31 +256,45 @@ Smoke run example (1 epoch, ~1500 train rows, CPU, ~75 s wall-clock):
 
 ### Full-training results (this repo)
 
-Trained from scratch with the committed `configs/base.yaml` (4 epochs, AMP, AdamW, ~10.9 M params, BPE vocab 30 k, max_len 128).
+Trained from scratch with the committed `configs/base.yaml` (8 epochs, AMP, AdamW, ~10.9 M params, BPE vocab 30 k, max_len 128, single H100). **Checkpoint selection is by the Jigsaw bias-aware metric on val, not val AUC** (`cfg.train.best_metric = jigsaw`).
 
-Per-epoch trajectory (logged to W&B as `train/epoch_{loss,acc}` and `val/{loss,auc,acc@0.5}`):
+Per-epoch trajectory (W&B: [base-v3-jigsaw](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/b8vq4xyx)):
 
-| Epoch | train loss | train acc | val loss | val AUC | val acc@0.5 |
-|------:|-----------:|----------:|---------:|--------:|------------:|
-|     0 |     0.6794 |    0.8545 |   0.6189 |  0.9320 |      0.8300 |
-|     1 |     0.6024 |    0.8677 |   0.5887 |  0.9388 |      0.8709 |
-|     2 |     0.5637 |    0.8750 |   0.5708 |  0.9416 |      0.8680 |
-|     3 |     0.5300 |    0.8805 |   0.5954 |  0.9417 |      0.8861 |
+| Epoch | train loss | train acc | val loss | val AUC | val acc@0.5 | **val Jigsaw** |
+|------:|-----------:|----------:|---------:|--------:|------------:|----------------:|
+|     0 |     0.6811 |    0.8541 |   0.6245 |  0.9319 |      0.8195 |          0.8706 |
+|     1 |     0.6090 |    0.8678 |   0.6150 |  0.9362 |      0.8831 |          0.8789 |
+|     2 |     0.5877 |    0.8705 |   0.6130 |  0.9365 |      0.8627 |          0.8797 |
+|     3 |     0.5718 |    0.8739 |   0.6119 |  0.9386 |      0.8463 |          0.8814 |
+|     4 |     0.5572 |    0.8766 |   0.6082 |  0.9383 |      0.8511 |          0.8790 |
+| **5** | **0.5401** | **0.8803** | **0.6164** | **0.9407** | **0.8792** | **0.8834** ★ |
+|     6 |     0.5231 |    0.8832 |   0.6323 |  0.9403 |      0.8833 |          0.8816 |
+|     7 |     0.5103 |    0.8859 |   0.6364 |  0.9402 |      0.8836 |          0.8824 |
 
-Val loss bottoms out at epoch 2 and ticks up at epoch 3 while val AUC plateaus. 
+★ best epoch by val Jigsaw — saved to `best.pt`. Val loss bottoms out at
+epoch 4 then climbs while val AUC plateaus, but val Jigsaw kept improving
+to epoch 5: this is exactly the pattern bias-aware selection is supposed
+to surface — a model that is no longer getting better at ranking overall
+but is still getting fairer on the harder subgroups.
+
+`val Jigsaw` here is computed with `train.val_min_subgroup_n = 30` so that
+identities with fewer than 30 val examples don't crush the p=-5 power-mean
+(the val set is 5 % of train; rare-identity AUCs are noisy at that size).
+Test-time eval keeps the unfiltered metric — see the caveat at the end
+of this section.
 
 **Test set** — union of `test_public_expanded.csv` and `test_private_expanded.csv`,
 n = 194,640:
 
 | Metric | Value |
 |---|---|
-| Overall ROC-AUC | **0.9425** |
-| Overall PR-AUC | 0.7073 |
-| Accuracy @ 0.5 | 0.8875 |
-| **Jigsaw bias metric** (the headline competition score) | **0.8652** |
-| Subgroup-AUC power-mean (p = -5) | 0.7769 |
-| BPSN-AUC power-mean (p = -5) | 0.8526 |
-| BNSP-AUC power-mean (p = -5) | 0.8889 |
+| Overall ROC-AUC | **0.9417** |
+| Overall PR-AUC | 0.7020 |
+| Accuracy @ 0.5 | 0.8807 |
+| **Jigsaw bias metric** (the headline competition score) | **0.8473** |
+| Subgroup-AUC power-mean (p = -5) | 0.7620 |
+| BPSN-AUC power-mean (p = -5) | 0.8541 |
+| BNSP-AUC power-mean (p = -5) | 0.8312 |
 
 Per-identity Subgroup / BPSN / BNSP AUCs (the full breakdown is in
 `docs/results/per_identity.csv`):
@@ -288,24 +302,37 @@ Per-identity Subgroup / BPSN / BNSP AUCs (the full breakdown is in
 ![Per-identity bias AUCs](docs/results/per_identity_aucs.png)
 
 **Reading the plot.** The model is broadly strong (Subgroup AUC ≥ 0.80
-on most identities), but a few subgroups stand out as weak:
+on most identities), with weakness clustered on rare identities and on
+the canonical "identity-mention → toxic" trap subgroups:
 
-- `other_religion` Subgroup AUC = 0.54 — only 29 examples; small-sample
-  noise dominates this estimate.
-- `homosexual_gay_or_lesbian` and `bisexual` Subgroup AUC ≈ 0.78 — the
-  classic "identity-mention → toxic" failure mode that this dataset's
-  bias metric is designed to surface; the BNSP at 0.95 confirms the
-  model misses rather than over-predicts.
-- `intellectual_or_learning_disability` BNSP = 0.65 — small subgroup
-  (24 examples), and the model under-detects toxic content involving it.
+- `intellectual_or_learning_disability` BNSP = 0.53 (n=24) — the model
+  badly under-detects toxic content directed at this group; the
+  small-sample noise on this subgroup is the single biggest contributor
+  to the test bias-metric's gap from the previous run.
+- `other_religion` Subgroup = 0.61 (n=29), `heterosexual` = 0.65 (n=141)
+  — small-sample noise dominates.
+- `homosexual_gay_or_lesbian` (n=1065) and `bisexual` (n=34) Subgroup ≈
+  0.77 — the classic shortcut failure: BNSP ≥ 0.95 (toxic content is
+  detected when it mentions these identities), but BPSN ≈ 0.79 (false
+  positives on identity-mentioning non-toxic comments). Same pattern on
+  `black` (Subgroup 0.79, BPSN 0.78) and `white` (0.79 / 0.78).
 
-These match the intuition that with no pretrained weights and just 4
-epochs of training, the model's biggest gaps are on rare identities
-where there isn't enough in-distribution signal to learn the
-identity-vs.-attack distinction. They are the priority targets for
-identity-aware re-weighting in §10.
+**An honest caveat on the headline metric.** The test Jigsaw of 0.8473
+is *slightly lower* than this repo's previous (4-epoch, val_auc-selected)
+run that landed at 0.8652. Two factors:
 
-**W&B run** (training curves, configs, hardware): [`gvpatil-uw/toxic-classifier/runs/29bqsxc5`](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/29bqsxc5) (`base-v2`).
+1. The val-time Jigsaw uses `min_subgroup_n=30` for stability; the test
+   Jigsaw is unfiltered. We are not directly optimizing the metric we
+   report — we are optimizing a slightly more conservative version of it.
+2. With only 24 test examples, `intellectual_or_learning_disability`
+   BNSP is itself noisy (0.65 last run, 0.53 this run with the same
+   architecture and seed).
+
+The methodological point — that bias-aware selection picks epoch 5 over
+epochs 6/7 even though their val AUCs are equivalent — stands. Closing
+the val/test metric gap is the next step (use the same `min_subgroup_n`
+on both, or weight subgroups by `sqrt(n)` instead of filtering); that's
+on the future-work list.
 
 ## 8. Inference
 

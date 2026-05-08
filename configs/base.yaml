@@ -38,6 +38,12 @@ data:
     - intellectual_or_learning_disability
     - psychiatric_or_mental_illness
     - other_disability
+  # Optional auxiliary targets (no-op when empty). Predicting these jointly
+  # is a future-work item; the plumbing is in place so the live edit is small.
+  auxiliary_targets: []
+  # Optional per-row sample-weight column (no-op when null). Useful for
+  # down-weighting low-confidence labels (e.g. `toxicity_annotator_count`).
+  sample_weight_col: null
 
 tokenizer:
   path: data/processed/tokenizer.json
@@ -57,7 +63,7 @@ model:
 train:
   device: cuda
   amp: true
-  epochs: 4
+  epochs: 8
   batch_size: 256
   eval_batch_size: 512
   num_workers: 4
@@ -69,8 +75,11 @@ train:
   log_every: 100
   pos_weight: auto
   use_weighted_sampler: false
+  loss: bce                       # 'bce' (default). Hook for future 'focal' / aux-head losses.
+  deterministic: false            # set true for fully deterministic (slower) runs
+  val_min_subgroup_n: 30          # filter rare-identity subgroups (n<30) at val-time so noise doesn't dominate p=-5 power-mean
   ckpt_dir: artifacts/base/ckpt
-  best_metric: val_auc
+  best_metric: jigsaw             # 'val_auc' or 'jigsaw' (Jigsaw bias-aware metric on val)
 
 eval:
   ckpt: artifacts/base/ckpt/best.pt

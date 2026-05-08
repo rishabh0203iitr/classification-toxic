@@ -19,11 +19,13 @@ data:
     - black
     - white
     - psychiatric_or_mental_illness
+  auxiliary_targets: []
+  sample_weight_col: null
 
 tokenizer:
-  path: artifacts/smoke/tokenizer.json
+  path: data/tiny/tokenizer.json    # pre-trained, committed; smoke runs no longer need to re-train
   vocab_size: 4096
-  train_if_missing: true
+  train_if_missing: false
   lowercase: true
   max_len: 64
 
@@ -50,6 +52,9 @@ train:
   log_every: 10
   pos_weight: auto                # auto = N_neg / N_pos on the train set
   use_weighted_sampler: false
+  loss: bce
+  deterministic: false
+  val_min_subgroup_n: 5           # tiny val (250 rows) — filter only true singletons
   ckpt_dir: artifacts/smoke/ckpt
   best_metric: val_auc
 
