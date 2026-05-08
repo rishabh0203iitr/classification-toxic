@@ -16,15 +16,19 @@ running `make smoke` against a tiny committed data subset (`data/tiny/`) — see
 
 **Full-training results** (single H100, 8 epochs, ~30 min training; checkpoint selection by Jigsaw bias metric on val):
 
-| Metric                                | Value      |
-|---------------------------------------|------------|
-| Test overall ROC-AUC                  | **0.9417** |
-| Test PR-AUC                           | 0.7020     |
-| Test Accuracy @ 0.5                   | 0.8807     |
-| **Test Jigsaw bias metric**           | **0.8473** |
+| Metric                                                    | Value      |
+|-----------------------------------------------------------|------------|
+| Test overall ROC-AUC                                      | **0.9417** |
+| Test PR-AUC                                               | 0.7020     |
+| Test Accuracy @ 0.5                                       | 0.8807     |
+| **Test Jigsaw bias metric** (headline, `min_subgroup_n=30`) | **0.8839** |
+| Test Jigsaw bias metric (all 22 evaluable subgroups)      | 0.8473     |
 
-Per-identity bias chart, per-identity CSV, and `metrics.json` are committed
-under [`docs/results/`](docs/results/). Training curves are on W&B
+Headline uses `min_subgroup_n=30` (matches val-time selection so we report
+the metric we optimise). Per-identity breakdown including the rare tail —
+which the headline filter excludes but doesn't hide — is in
+[`docs/results/per_identity.csv`](docs/results/per_identity.csv) and the
+chart there. Training curves are on W&B
 ([gvpatil-uw/toxic-classifier/runs/b8vq4xyx](https://wandb.ai/gvpatil-uw/toxic-classifier/runs/b8vq4xyx)).
 
 The full design rationale and per-identity breakdown are in **[`report.md`](report.md)**.

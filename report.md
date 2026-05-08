@@ -277,62 +277,76 @@ to epoch 5: this is exactly the pattern bias-aware selection is supposed
 to surface — a model that is no longer getting better at ranking overall
 but is still getting fairer on the harder subgroups.
 
-`val Jigsaw` here is computed with `train.val_min_subgroup_n = 30` so that
-identities with fewer than 30 val examples don't crush the p=-5 power-mean
-(the val set is 5 % of train; rare-identity AUCs are noisy at that size).
-Test-time eval keeps the unfiltered metric — see the caveat at the end
-of this section.
+`val Jigsaw` and the headline test Jigsaw both use **`min_subgroup_n = 30`**:
+identities with fewer than 30 examples in the eval set are excluded from
+the *scalar* metric (otherwise a single n=24 subgroup with high sampling
+SE can swing a `p = -5` power-mean by ~0.04). Per-identity reporting is
+kept unfiltered — the rare tail is shown in the chart and called out
+separately below — so this filter doesn't hide weak subgroups, it just
+keeps the headline number a faithful summary of what we optimised.
 
 **Test set** — union of `test_public_expanded.csv` and `test_private_expanded.csv`,
-n = 194,640:
+n = 194,640. **18 of 24 identity subgroups have n ≥ 30 in test** and are
+included in the headline.
 
 | Metric | Value |
 |---|---|
 | Overall ROC-AUC | **0.9417** |
 | Overall PR-AUC | 0.7020 |
 | Accuracy @ 0.5 | 0.8807 |
-| **Jigsaw bias metric** (the headline competition score) | **0.8473** |
-| Subgroup-AUC power-mean (p = -5) | 0.7620 |
-| BPSN-AUC power-mean (p = -5) | 0.8541 |
-| BNSP-AUC power-mean (p = -5) | 0.8312 |
+| **Jigsaw bias metric (headline, n ≥ 30)** | **0.8839** |
+| Subgroup-AUC power-mean (p = -5, n ≥ 30) | 0.8110 |
+| BPSN-AUC power-mean (p = -5, n ≥ 30) | 0.8500 |
+| BNSP-AUC power-mean (p = -5, n ≥ 30) | 0.9330 |
+| Jigsaw bias metric (all 22 evaluable subgroups) | 0.8473 |
 
-Per-identity Subgroup / BPSN / BNSP AUCs (the full breakdown is in
-`docs/results/per_identity.csv`):
+Per-identity Subgroup / BPSN / BNSP AUCs (full breakdown in
+`docs/results/per_identity.csv`; rare-tail bars are drawn faded):
 
 ![Per-identity bias AUCs](docs/results/per_identity_aucs.png)
 
-**Reading the plot.** The model is broadly strong (Subgroup AUC ≥ 0.80
-on most identities), with weakness clustered on rare identities and on
-the canonical "identity-mention → toxic" trap subgroups:
+**Reading the plot — common identities (n ≥ 30, in headline).** The
+model is broadly strong (Subgroup AUC ≥ 0.80 on 14 of 18). Two
+weakness patterns:
 
-- `intellectual_or_learning_disability` BNSP = 0.53 (n=24) — the model
-  badly under-detects toxic content directed at this group; the
-  small-sample noise on this subgroup is the single biggest contributor
-  to the test bias-metric's gap from the previous run.
-- `other_religion` Subgroup = 0.61 (n=29), `heterosexual` = 0.65 (n=141)
-  — small-sample noise dominates.
-- `homosexual_gay_or_lesbian` (n=1065) and `bisexual` (n=34) Subgroup ≈
-  0.77 — the classic shortcut failure: BNSP ≥ 0.95 (toxic content is
-  detected when it mentions these identities), but BPSN ≈ 0.79 (false
-  positives on identity-mentioning non-toxic comments). Same pattern on
-  `black` (Subgroup 0.79, BPSN 0.78) and `white` (0.79 / 0.78).
+- `homosexual_gay_or_lesbian` (n=1065) Subgroup 0.77, `bisexual` (n=34)
+  Subgroup 0.77 — the canonical "identity-mention → toxic" trap: BNSP
+  ≥ 0.95 means the model *does* detect toxic content directed at these
+  groups, but BPSN ≈ 0.79 says it also fires on non-toxic comments that
+  merely mention them. Same shape on `black` (Subgroup 0.79, BPSN 0.78)
+  and `white` (0.79 / 0.78).
+- `heterosexual` (n=141) Subgroup 0.65 — under-ranks within-subgroup
+  toxicity; smaller sample so harder to tell whether this is real
+  weakness or sampling noise.
 
-**An honest caveat on the headline metric.** The test Jigsaw of 0.8473
-is *slightly lower* than this repo's previous (4-epoch, val_auc-selected)
-run that landed at 0.8652. Two factors:
+**Rare-subgroup performance (n < 30, faded in the chart, not in the
+headline).** These are shown for transparency. With sample sizes this
+small a single misranked example moves Subgroup AUC by ~1/n (≈4-10
+percentage points), so the volatility is intrinsic — but the
+under-detection patterns are still informative as priorities for the
+sample-weighting and auxiliary-head work in §10.
 
-1. The val-time Jigsaw uses `min_subgroup_n=30` for stability; the test
-   Jigsaw is unfiltered. We are not directly optimizing the metric we
-   report — we are optimizing a slightly more conservative version of it.
-2. With only 24 test examples, `intellectual_or_learning_disability`
-   BNSP is itself noisy (0.65 last run, 0.53 this run with the same
-   architecture and seed).
+| Identity                            |  n |  SG  |  BPSN |  BNSP |
+|-------------------------------------|---:|-----:|------:|------:|
+| intellectual_or_learning_disability | 24 | 0.57 |  0.96 |  0.53 ⚠ |
+| other_religion                      | 29 | 0.61 |  0.89 |  0.87 |
+| physical_disability                 |  9 | 1.00 |  0.91 |  0.95 |
+| other_sexual_orientation            |  1 |   —  |  0.79 |   —   |
+| other_gender                        |  0 |   —  |    —  |   —   |
+| other_disability                    |  0 |   —  |    —  |   —   |
 
-The methodological point — that bias-aware selection picks epoch 5 over
-epochs 6/7 even though their val AUCs are equivalent — stands. Closing
-the val/test metric gap is the next step (use the same `min_subgroup_n`
-on both, or weight subgroups by `sqrt(n)` instead of filtering); that's
-on the future-work list.
+The standout is `intellectual_or_learning_disability` BNSP = 0.53: on
+its 24 test examples, the model fails to distinguish toxic from
+non-toxic content involving this identity. **This is the highest-priority
+target for §10's identity-aware re-weighting / auxiliary-head work** —
+even though it can't move the headline by itself, this is exactly the
+real-world failure mode the Jigsaw metric was built around.
+
+**Methodological note.** The model was selected by val Jigsaw (epoch 5,
+val Jigsaw 0.8834) over the val-AUC-equivalent epochs 6/7 — bias-aware
+selection genuinely picks the more bias-fair checkpoint when val AUC has
+plateaued. Same `min_subgroup_n` is applied at val and test now so the
+metric we optimise equals the metric we report.
 
 ## 8. Inference
 

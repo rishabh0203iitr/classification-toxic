@@ -45,7 +45,11 @@ def _predict(model, loader, device):
     )
 
 
-def _bar_chart(per_identity, out_path: Path) -> None:
+def _bar_chart(per_identity, out_path: Path, min_subgroup_n: int = 1) -> None:
+    """Per-identity Subgroup/BPSN/BNSP bar chart. Identities with
+    n_in_subgroup < min_subgroup_n are excluded from the headline scalar
+    but still drawn here at lower opacity so weakness on the rare tail
+    isn't visually suppressed."""
     try:
         import matplotlib
 
@@ -57,17 +61,25 @@ def _bar_chart(per_identity, out_path: Path) -> None:
     sg = [x.subgroup_auc for x in per_identity]
     bpsn = [x.bpsn_auc for x in per_identity]
     bnsp = [x.bnsp_auc for x in per_identity]
+    in_headline = [x.n_in_subgroup >= min_subgroup_n for x in per_identity]
+    alphas = [1.0 if h else 0.4 for h in in_headline]
     x = np.arange(len(names))
     w = 0.27
     fig, ax = plt.subplots(figsize=(max(8, 0.5 * len(names)), 4.5))
-    ax.bar(x - w, sg, w, label="Subgroup")
-    ax.bar(x, bpsn, w, label="BPSN")
-    ax.bar(x + w, bnsp, w, label="BNSP")
+    sg_bars = ax.bar(x - w, sg, w, label="Subgroup", color="tab:blue")
+    bp_bars = ax.bar(x, bpsn, w, label="BPSN", color="tab:orange")
+    bn_bars = ax.bar(x + w, bnsp, w, label="BNSP", color="tab:green")
+    for bars in (sg_bars, bp_bars, bn_bars):
+        for bar, a in zip(bars, alphas, strict=True):
+            bar.set_alpha(a)
     ax.set_xticks(x)
     ax.set_xticklabels(names, rotation=45, ha="right")
     ax.set_ylim(0.5, 1.0)
     ax.set_ylabel("AUC")
-    ax.set_title("Per-identity bias AUCs")
+    title = "Per-identity bias AUCs"
+    if min_subgroup_n > 1:
+        title += f"  (faded bars: n < {min_subgroup_n}, excluded from headline)"
+    ax.set_title(title)
     ax.legend()
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -137,8 +149,25 @@ def main(argv: list[str] | None = None) -> int:
     acc = float(((s > cfg["eval"].get("threshold", 0.5)).astype(np.float32) == y).mean()) if len(y) else float("nan")
 
     identity_names = cfg["data"].get("identity_cols", [])
-    per_id = compute_per_identity_aucs(y, s, idents, identity_names)
-    final = jigsaw_bias_metric(overall_auc, per_id)
+    min_n = int(cfg["eval"].get("min_subgroup_n", 1))
+
+    # Two passes:
+    #   - per_id_full     : every identity (min_examples=1). Drives the
+    #                       per-identity CSV + chart so the rare tail is
+    #                       always surfaced.
+    #   - per_id_headline : identities with n>=min_n. Drives the scalar
+    #                       Jigsaw metric we report as the headline (and
+    #                       that train.py optimises against).
+    per_id_full = compute_per_identity_aucs(y, s, idents, identity_names, min_examples=1)
+    per_id_headline = compute_per_identity_aucs(y, s, idents, identity_names, min_examples=min_n)
+
+    final_headline = jigsaw_bias_metric(overall_auc, per_id_headline)
+    final_unfiltered = jigsaw_bias_metric(overall_auc, per_id_full)
+
+    rare_subgroups = [
+        x.__dict__ for x in per_id_full
+        if 0 < x.n_in_subgroup < min_n
+    ]
 
     out_dir = Path(cfg["eval"]["out_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -150,21 +179,30 @@ def main(argv: list[str] | None = None) -> int:
         "overall_pr_auc": overall_prauc,
         "accuracy@thr": acc,
         "threshold": cfg["eval"].get("threshold", 0.5),
-        "jigsaw_bias_metric": final,
-        "subgroup_auc_pmean": power_mean(np.array([x.subgroup_auc for x in per_id])),
-        "bpsn_auc_pmean": power_mean(np.array([x.bpsn_auc for x in per_id])),
-        "bnsp_auc_pmean": power_mean(np.array([x.bnsp_auc for x in per_id])),
-        "per_identity": [x.__dict__ for x in per_id],
+        "min_subgroup_n": min_n,
+        "jigsaw_bias_metric": final_headline,
+        "jigsaw_bias_metric_unfiltered": final_unfiltered,
+        "subgroup_auc_pmean": power_mean(np.array([x.subgroup_auc for x in per_id_headline])),
+        "bpsn_auc_pmean": power_mean(np.array([x.bpsn_auc for x in per_id_headline])),
+        "bnsp_auc_pmean": power_mean(np.array([x.bnsp_auc for x in per_id_headline])),
+        "subgroup_auc_pmean_unfiltered": power_mean(np.array([x.subgroup_auc for x in per_id_full])),
+        "bpsn_auc_pmean_unfiltered": power_mean(np.array([x.bpsn_auc for x in per_id_full])),
+        "bnsp_auc_pmean_unfiltered": power_mean(np.array([x.bnsp_auc for x in per_id_full])),
+        "rare_subgroups": rare_subgroups,
+        "per_identity": [x.__dict__ for x in per_id_full],
     }
     with open(out_dir / "metrics.json", "w") as f:
         json.dump(summary, f, indent=2)
-    pd.DataFrame([x.__dict__ for x in per_id]).to_csv(out_dir / "per_identity.csv", index=False)
-    _bar_chart(per_id, out_dir / "per_identity_aucs.png")
+    pd.DataFrame([x.__dict__ for x in per_id_full]).to_csv(out_dir / "per_identity.csv", index=False)
+    _bar_chart(per_id_full, out_dir / "per_identity_aucs.png", min_subgroup_n=min_n)
     log.info(
-        "Overall AUC=%.4f | PR-AUC=%.4f | Jigsaw bias metric=%.4f | wrote %s",
-        overall_auc, overall_prauc, final, out_dir,
+        "Overall AUC=%.4f | PR-AUC=%.4f | Jigsaw (headline n>=%d)=%.4f | Jigsaw (unfiltered)=%.4f | wrote %s",
+        overall_auc, overall_prauc, min_n, final_headline, final_unfiltered, out_dir,
     )
-    print(json.dumps({k: v for k, v in summary.items() if k != "per_identity"}, indent=2))
+    print(json.dumps(
+        {k: v for k, v in summary.items() if k not in {"per_identity", "rare_subgroups"}},
+        indent=2,
+    ))
     return 0
 
 

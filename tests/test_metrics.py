@@ -1,4 +1,6 @@
 """Sanity tests for the bias-aware AUC metric."""
+import math
+
 import numpy as np
 
 from toxic_classifier.metrics import (
@@ -46,6 +48,32 @@ def test_power_mean_minus_five_penalises_min():
     pm = power_mean(v, p=-5)
     am = float(v.mean())
     assert pm < am - 0.1
+
+
+def test_compute_per_identity_aucs_filters_below_min_examples():
+    """Subgroups with n_in_subgroup < min_examples should produce all-NaN
+    per-identity rows so the downstream power-mean filter drops them."""
+    rng = np.random.default_rng(0)
+    n = 200
+    y = rng.integers(0, 2, size=n)
+    s = rng.uniform(0, 1, size=n)
+    # Two identity columns: one common (~50% of rows), one rare (5 rows).
+    common = (rng.uniform(0, 1, size=n) > 0.5).astype(float)
+    rare = np.zeros(n)
+    rare[:5] = 1.0
+    idents = np.stack([common, rare], axis=1)
+
+    from toxic_classifier.metrics import compute_per_identity_aucs
+
+    per_id = compute_per_identity_aucs(y, s, idents, ["common", "rare"], min_examples=30)
+    common_row, rare_row = per_id
+    # common has plenty of examples → real numbers
+    assert not math.isnan(common_row.subgroup_auc)
+    # rare has 5 < 30 → filtered to NaN
+    assert math.isnan(rare_row.subgroup_auc)
+    assert math.isnan(rare_row.bpsn_auc)
+    assert math.isnan(rare_row.bnsp_auc)
+    assert rare_row.n_in_subgroup == 5
 
 
 def test_jigsaw_metric_survives_all_nan_subgroup():

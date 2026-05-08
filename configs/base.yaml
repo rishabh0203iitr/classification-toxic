@@ -85,6 +85,7 @@ eval:
   ckpt: artifacts/base/ckpt/best.pt
   out_dir: artifacts/base/eval
   threshold: 0.5
+  min_subgroup_n: 30              # mirrors train.val_min_subgroup_n: same metric we optimise = the metric we report
 
 wandb:
   project: toxic-classifier
