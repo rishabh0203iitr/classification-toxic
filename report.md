@@ -91,7 +91,7 @@ is quadratic in sequence length).
 Decision: `insult` is near-synonymous with the binary target and adds
 little auxiliary signal; the other four are weakly-to-moderately
 correlated and are good candidates for an auxiliary multi-task head
-(see §10).
+(see §9).
 
 **Train vs. test distributional drift.** Positive rates are within
 0.06 percentage points (8.00 % train, 7.94 % test). All identity
@@ -105,7 +105,7 @@ discrepancies show up as noise in the per-identity bias metric (§7).
 is 4 (90th percentile 10), so each `target` value is the mean of
 roughly 4 binary judgements and therefore quantised at multiples of
 ~0.25. This is one source of label noise; it motivates the future-work
-item of weighting training rows by `toxicity_annotator_count` (§10).
+item of weighting training rows by `toxicity_annotator_count` (§9).
 
 ## 3. Splitting strategy
 
@@ -395,11 +395,11 @@ for transparency:
 With these sample sizes a single misranked example moves Subgroup AUC
 by approximately 1/n (4–10 percentage points), so the variance is
 intrinsic. The point estimates are still informative for prioritising
-the sample-weighting and auxiliary-head work in §10:
+the sample-weighting and auxiliary-head work in §9:
 `intellectual_or_learning_disability` has BNSP = 0.53 on 24 test
 examples, indicating that the model under-detects toxic content
 directed at this identity. This is the most concrete target for the
-identity-aware re-weighting work proposed in §10, even though the
+identity-aware re-weighting work proposed in §9, even though the
 subgroup is too small to move the headline scalar.
 
 **Selection notes.** Epoch 5 is selected over epochs 6 and 7, all of
@@ -417,7 +417,7 @@ column (sigmoid of the model's output logit). It uses the same
 dynamic-pad collate function as training. The `--num-workers` flag
 controls CPU dataloading parallelism. End-to-end inference latency
 and throughput are not measured in the current pipeline; adding a
-benchmark mode is in §10.
+benchmark mode is in §9.
 
 Possible additional inference paths, all unimplemented at present:
 
@@ -425,35 +425,7 @@ Possible additional inference paths, all unimplemented at present:
 - INT8 dynamic post-training quantisation of the linear layers,
 - An HTTP server (e.g. FastAPI) wrapping `infer.py` for online use.
 
-## 9. Software and packaging
-
-- **Python package.** `src/toxic_classifier/` with `pyproject.toml` and
-  three console scripts (`toxic-train`, `toxic-eval`, `toxic-prepare`).
-  Editable install: `pip install -e .`.
-- **Configs.** YAML, intentionally flat enough to be read at a glance.
-  Per-key overrides: `--config configs/foo.yaml --set k.k=v` (each
-  override repeated as `--set …`).
-- **Tests.** `pytest` covers model forward shapes, padding-mask
-  invariance, split reproducibility, no-leakage between splits, the
-  bias-metric on a perfect predictor, the bias-metric filter behaviour,
-  and an end-to-end smoke run. `tests/test_smoke.py` calls the same
-  Python entry points as `make smoke` so the two cannot drift.
-- **Lint.** `ruff` with the per-project ignore list `E501` (line length,
-  handled by the formatter), `N806` (uppercase `B`/`L`/`D` for
-  batch/seq/dim shapes), and `SIM115` (the `_open_writers` /
-  `_close_writers` pattern in `prepare.py` is intentional).
-- **Continuous Integration.** A workflow definition is committed at the
-  repo root as `ci.yml.template`. Moving it into
-  `.github/workflows/ci.yml` requires a Personal Access Token with the
-  `workflow` scope; this is a one-step manual move and is not done in
-  the current commit.
-- **Secrets.** The Weights & Biases API key is read from the
-  `WANDB_API_KEY` environment variable; it is never written into a
-  config file or committed. The Personal Access Token used to push to
-  GitHub lives only in `.git/config` (untracked) and should be rotated
-  after the project is handed off.
-
-## 10. Future work
+## 9. Future work
 
 In rough priority order:
 
@@ -500,7 +472,7 @@ In rough priority order:
   Comments improves robustness on the long-tail identities. Adding
   non-English data is a larger project.
 
-## 11. Limitations
+## 10. Limitations
 
 - **Single English-language dataset.** The model is trained on
   comments from one platform (Civil Comments), in English, dated
