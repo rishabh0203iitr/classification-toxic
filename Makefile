@@ -6,7 +6,7 @@ CONFIG ?= configs/base.yaml
 help:
 	@echo "Targets:"
 	@echo "  install       - install runtime deps + package"
-	@echo "  install-dev   - install dev deps (lint, tests, jupyter)"
+	@echo "  install-dev   - install dev deps (pytest, ruff)"
 	@echo "  smoke         - run end-to-end smoke pipeline on data/tiny/ (CPU, <5 min)"
 	@echo "  tiny          - regenerate data/tiny/* from data/full/train.csv"
 	@echo "  prepare       - tokenise full Jigsaw data into data/processed/"
