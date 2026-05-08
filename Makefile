@@ -1,4 +1,4 @@
-.PHONY: help install install-dev smoke prepare train eval test lint format clean tiny
+.PHONY: help install install-dev smoke prepare train eval eda test lint format clean tiny
 
 PYTHON ?= python
 CONFIG ?= configs/base.yaml
@@ -12,6 +12,7 @@ help:
 	@echo "  prepare       - tokenise full Jigsaw data into data/processed/"
 	@echo "  train         - train with CONFIG=configs/base.yaml (default)"
 	@echo "  eval          - evaluate latest checkpoint on the test set"
+	@echo "  eda           - run scripts/eda.py over data/full/ → docs/results/eda/"
 	@echo "  test          - run pytest"
 	@echo "  lint          - run ruff check"
 	@echo "  format        - run ruff format"
@@ -38,6 +39,9 @@ train:
 
 eval:
 	$(PYTHON) -m toxic_classifier.eval --config $(CONFIG)
+
+eda:
+	$(PYTHON) scripts/eda.py
 
 test:
 	$(PYTHON) -m pytest

@@ -1,0 +1,209 @@
+
+==============================================================================
+LOAD
+==============================================================================
+train  : data/full/train.csv
+  rows : 1,804,874
+  cols : 45
+  dtypes: {dtype('float64'): 32, dtype('int64'): 10, <StringDtype(storage='python', na_value=nan)>: 3}
+
+==============================================================================
+SCHEMA
+==============================================================================
+  id                                          dtype=int64     non-null= 1,804,874 (100.0%)
+  target                                      dtype=float64   non-null= 1,804,874 (100.0%)
+  comment_text                                dtype=str       non-null= 1,804,871 (100.0%)
+  severe_toxicity                             dtype=float64   non-null= 1,804,874 (100.0%)
+  obscene                                     dtype=float64   non-null= 1,804,874 (100.0%)
+  identity_attack                             dtype=float64   non-null= 1,804,874 (100.0%)
+  insult                                      dtype=float64   non-null= 1,804,874 (100.0%)
+  threat                                      dtype=float64   non-null= 1,804,874 (100.0%)
+  asian                                       dtype=float64   non-null=   405,130 (22.4%)
+  atheist                                     dtype=float64   non-null=   405,130 (22.4%)
+  bisexual                                    dtype=float64   non-null=   405,130 (22.4%)
+  black                                       dtype=float64   non-null=   405,130 (22.4%)
+  buddhist                                    dtype=float64   non-null=   405,130 (22.4%)
+  christian                                   dtype=float64   non-null=   405,130 (22.4%)
+  female                                      dtype=float64   non-null=   405,130 (22.4%)
+  heterosexual                                dtype=float64   non-null=   405,130 (22.4%)
+  hindu                                       dtype=float64   non-null=   405,130 (22.4%)
+  homosexual_gay_or_lesbian                   dtype=float64   non-null=   405,130 (22.4%)
+  intellectual_or_learning_disability         dtype=float64   non-null=   405,130 (22.4%)
+  jewish                                      dtype=float64   non-null=   405,130 (22.4%)
+  latino                                      dtype=float64   non-null=   405,130 (22.4%)
+  male                                        dtype=float64   non-null=   405,130 (22.4%)
+  muslim                                      dtype=float64   non-null=   405,130 (22.4%)
+  other_disability                            dtype=float64   non-null=   405,130 (22.4%)
+  other_gender                                dtype=float64   non-null=   405,130 (22.4%)
+  other_race_or_ethnicity                     dtype=float64   non-null=   405,130 (22.4%)
+  other_religion                              dtype=float64   non-null=   405,130 (22.4%)
+  other_sexual_orientation                    dtype=float64   non-null=   405,130 (22.4%)
+  physical_disability                         dtype=float64   non-null=   405,130 (22.4%)
+  psychiatric_or_mental_illness               dtype=float64   non-null=   405,130 (22.4%)
+  transgender                                 dtype=float64   non-null=   405,130 (22.4%)
+  white                                       dtype=float64   non-null=   405,130 (22.4%)
+  created_date                                dtype=str       non-null= 1,804,874 (100.0%)
+  publication_id                              dtype=int64     non-null= 1,804,874 (100.0%)
+  parent_id                                   dtype=float64   non-null= 1,026,228 (56.9%)
+  article_id                                  dtype=int64     non-null= 1,804,874 (100.0%)
+  rating                                      dtype=str       non-null= 1,804,874 (100.0%)
+  funny                                       dtype=int64     non-null= 1,804,874 (100.0%)
+  wow                                         dtype=int64     non-null= 1,804,874 (100.0%)
+  sad                                         dtype=int64     non-null= 1,804,874 (100.0%)
+  likes                                       dtype=int64     non-null= 1,804,874 (100.0%)
+  disagree                                    dtype=int64     non-null= 1,804,874 (100.0%)
+  sexual_explicit                             dtype=float64   non-null= 1,804,874 (100.0%)
+  identity_annotator_count                    dtype=int64     non-null= 1,804,874 (100.0%)
+  toxicity_annotator_count                    dtype=int64     non-null= 1,804,874 (100.0%)
+
+==============================================================================
+TARGET (continuous toxicity in [0,1])
+==============================================================================
+  count   : 1,804,874
+  mean    : 0.1030
+  std     : 0.1971
+  median  : 0.0000
+  quantiles: q50=0.0000, q75=0.1667, q90=0.4000, q95=0.6000, q99=0.8333
+  exact 0 : 70.07%
+  >= 0.5  : 144,334 (8.00%)  ← binary positives
+  >= 0.7  : 3.25%
+  bucket distribution:
+    [0.0, 0.1)            1,266,229 (70.16%)
+    [0.1, 0.3)              272,556 (15.10%)
+    [0.3, 0.5)              121,755 (6.75%)
+    [0.5, 0.7)               85,660 (4.75%)
+    [0.7, 0.9)               49,448 (2.74%)
+    [0.9, 1.0)                9,226 (0.51%)
+
+==============================================================================
+SUB-TOXICITY LABELS (correlation with target)
+==============================================================================
+  severe_toxicity           mean=0.0046  >=0.5: 0.001%  pearson_with_target=0.393
+  obscene                   mean=0.0139  >=0.5: 0.532%  pearson_with_target=0.493
+  identity_attack           mean=0.0226  >=0.5: 0.743%  pearson_with_target=0.450
+  insult                    mean=0.0812  >=0.5: 5.903%  pearson_with_target=0.928
+  threat                    mean=0.0093  >=0.5: 0.237%  pearson_with_target=0.288
+  sexual_explicit           mean=0.0066  >=0.5: 0.260%  pearson_with_target=0.253
+
+==============================================================================
+IDENTITY COLUMNS — coverage, mention rate, toxicity contrast
+==============================================================================
+  Note: identities are only annotated on a subset (~22.4%) of rows; the rest are NaN.
+                           identity  n_annotated  n_mentioned  mention_rate_among_annotated  tox_rate_when_mentioned  tox_rate_overall  tox_lift
+                             female       405130        53429                        0.1319                   0.1368            0.0800    1.7111
+                               male       405130        44484                        0.1098                   0.1503            0.0800    1.8792
+                          christian       405130        40423                        0.0998                   0.0909            0.0800    1.1362
+                              white       405130        25082                        0.0619                   0.2806            0.0800    3.5089
+                             muslim       405130        21006                        0.0519                   0.2276            0.0800    2.8461
+                              black       405130        14901                        0.0368                   0.3139            0.0800    3.9258
+          homosexual_gay_or_lesbian       405130        10997                        0.0271                   0.2838            0.0800    3.5489
+                             jewish       405130         7651                        0.0189                   0.1621            0.0800    2.0267
+      psychiatric_or_mental_illness       405130         4889                        0.0121                   0.2107            0.0800    2.6345
+                              asian       405130         4578                        0.0113                   0.1236            0.0800    1.5460
+                        transgender       405130         2499                        0.0062                   0.2129            0.0800    2.6621
+                             latino       405130         2004                        0.0049                   0.1936            0.0800    2.4211
+                            atheist       405130         1412                        0.0035                   0.1310            0.0800    1.6384
+                       heterosexual       405130         1291                        0.0032                   0.2277            0.0800    2.8477
+                           buddhist       405130          588                        0.0015                   0.1173            0.0800    1.4674
+                              hindu       405130          580                        0.0014                   0.1052            0.0800    1.3152
+            other_race_or_ethnicity       405130          508                        0.0013                   0.1870            0.0800    2.3385
+                     other_religion       405130          325                        0.0008                   0.1446            0.0800    1.8084
+                           bisexual       405130          287                        0.0007                   0.2160            0.0800    2.7014
+intellectual_or_learning_disability       405130           93                        0.0002                   0.0645            0.0800    0.8068
+                physical_disability       405130           82                        0.0002                   0.0732            0.0800    0.9150
+                       other_gender       405130           10                        0.0000                   0.3000            0.0800    3.7515
+           other_sexual_orientation       405130           10                        0.0000                   0.3000            0.0800    3.7515
+                   other_disability       405130            5                        0.0000                   0.2000            0.0800    2.5010
+
+==============================================================================
+IDENTITY × IDENTITY co-mention (top 10 pairs)
+==============================================================================
+  male                                   & female                                   18,810
+  black                                  & white                                     5,900
+  male                                   & white                                     5,570
+  female                                 & christian                                 4,248
+  male                                   & christian                                 4,009
+  christian                              & muslim                                    3,548
+  female                                 & white                                     2,712
+  male                                   & black                                     2,497
+  female                                 & muslim                                    2,379
+  christian                              & jewish                                    2,317
+
+==============================================================================
+COMMENT LENGTH (characters + whitespace tokens)
+==============================================================================
+  chars: mean=297.2  median=202  q90=747  q95=953  max=1906
+  words: mean=51.3  median=35  q90=128  q95=159  max=317
+  empty comments: 3
+
+==============================================================================
+ENGAGEMENT FEATURES (descriptive only — not used as features by the model)
+==============================================================================
+  funny       mean=0.278  q90=1  max=102
+  wow         mean=0.044  q90=0  max=21
+  sad         mean=0.109  q90=0  max=31
+  likes       mean=2.446  q90=6  max=300
+  disagree    mean=0.584  q90=2  max=187
+
+==============================================================================
+ANNOTATOR COUNTS
+==============================================================================
+  toxicity_annotator_count       mean=8.78  median=4  q90=10  max=4936  zeros=0.00%
+  identity_annotator_count       mean=1.44  median=0  q90=4  max=1866  zeros=77.55%
+
+==============================================================================
+TIME SPAN
+==============================================================================
+  earliest : 2015-09-29 10:50:41.987077+00:00
+  latest   : 2017-11-11 01:01:10.822969+00:00
+  span     : 773 days
+  per year:
+    2015:       651
+    2016:   433,954
+    2017: 1,370,267
+
+==============================================================================
+TRAIN vs TEST distributions
+==============================================================================
+  rows train       : 1,804,874
+  rows test (union): 194,640
+  positive rate train : 7.9969%
+  positive rate test  : 7.9367%
+  test/train pos-rate ratio : 0.992
+
+  identity mention-rate drift (test vs train, among rows with identity annotations):
+  identity                                train_rate   test_rate   ratio
+  female                                    13.1881%    12.0247%    0.91
+  male                                      10.9802%    10.2309%    0.93
+  christian                                  9.9778%     9.8577%    0.99
+  white                                      6.1911%     5.7196%    0.92
+  muslim                                     5.1850%     4.7586%    0.92
+  black                                      3.6781%     3.5433%    0.96
+  homosexual_gay_or_lesbian                  2.7144%     2.4843%    0.92
+  jewish                                     1.8885%     1.9477%    1.03
+  psychiatric_or_mental_illness              1.2068%     1.1920%    0.99
+  asian                                      1.1300%     1.0590%    0.94
+  transgender                                0.6168%     0.6065%    0.98
+  latino                                     0.4947%     0.5248%    1.06
+  atheist                                    0.3485%     0.6531%    1.87
+  heterosexual                               0.3187%     0.3289%    1.03
+  buddhist                                   0.1451%     0.1236%    0.85
+  hindu                                      0.1432%     0.1190%    0.83
+  other_race_or_ethnicity                    0.1254%     0.0956%    0.76
+  other_religion                             0.0802%     0.0676%    0.84
+  bisexual                                   0.0708%     0.0793%    1.12
+  intellectual_or_learning_disability        0.0230%     0.0560%    2.44
+  physical_disability                        0.0202%     0.0210%    1.04
+  other_gender                               0.0025%     0.0000%    0.00
+  other_sexual_orientation                   0.0025%     0.0023%    0.95
+  other_disability                           0.0012%     0.0000%    0.00
+
+==============================================================================
+PLOTS
+==============================================================================
+  wrote docs/results/eda/target_hist.png
+  wrote docs/results/eda/length_hist.png
+  wrote docs/results/eda/identity_mentions.png
+  wrote docs/results/eda/identity_tox_rate.png
+
+Wrote summary → docs/results/eda/summary.json

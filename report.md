@@ -27,37 +27,75 @@ fast implementation of standard BPE.)
 
 ## 2. Data analysis
 
-Raw schema:
-- `train.csv` (~1.80 M rows): `id, target, comment_text`, 5 toxicity
-  sub-labels (`severe_toxicity`, `obscene`, `identity_attack`, `insult`,
-  `threat`), 24 identity scores, plus engagement / publication metadata.
-- `test.csv` (~97 k rows): unlabelled input only.
-- `test_public_expanded.csv` and `test_private_expanded.csv` (~97 k each):
-  the labelled test sets. We use **both** as held-out test, since
-  `test.csv` has no labels.
+Full reproducible analysis lives in [`scripts/eda.py`](scripts/eda.py); raw
+outputs (CSV tables, full log, four plots) are committed under
+[`docs/results/eda/`](docs/results/eda/). This section keeps only the
+findings that drove a concrete modelling or engineering decision.
 
-Distributional facts that drove the design:
+**Schema** — 1,804,874 rows × 45 columns. Five families: `id`, `comment_text`,
+`target` + 6 sub-toxicity scores, **24 identity scores (annotated on only
+22.4 % of rows)**, and engagement / publication metadata. Held-out test is
+the union of `test_public_expanded.csv` + `test_private_expanded.csv`
+(194,640 labelled rows); the bare `test.csv` is unlabelled and unused.
 
-- **Class imbalance**: ~8% of the training rows have `target ≥ 0.5`.
-  This makes BCE with `pos_weight ≈ 11.5` (or weighted sampling) a
-  reasonable default. We expose both via config; the default for `base.yaml`
-  is `pos_weight=auto` (computed from the training set), and a
-  `WeightedRandomSampler` is available as an alternative.
-- **Length distribution**: comment lengths are heavy-tailed but the
-  95th percentile is ~120 BPE tokens with a 30 k vocab. Using `max_len=128`
-  for full training keeps almost all comments intact, while saving ~3×
-  compute relative to a 512-token cap.
-- **Identity sparsity**: the identity columns are heavily skewed —
-  e.g. `male`/`female`/`christian` are common, while
-  `intellectual_or_learning_disability` appears in <0.5% of comments.
-  This matters for stratification (see §3) and for the bias metric, where
-  a tiny subgroup can swing the power-mean disproportionately.
-- **Identity ↔ toxicity correlation**: this is the headline phenomenon —
-  in the training set, the toxic rate among comments mentioning some
-  identities is markedly higher than the base rate, *not because the model
-  should learn that identity → toxic*, but because the data collection
-  process surfaced more identity-attacking comments. A bias-blind model
-  trivially internalises this.
+**Target.** Hyper-skewed: `mean=0.103, median=0, q95=0.6`. **70 %** of rows
+are exactly 0; **8.0 %** are `target ≥ 0.5` (the binary positives); ~11.5 %
+sit in the disagreement zone `[0.3, 0.7]` where annotators split. Decisions:
+`pos_weight ≈ 11.5` in `BCEWithLogitsLoss` (auto-computed); the disagreement
+band is a hard floor on accuracy and motivates the future-work
+sample-weighting hook.
+
+**Identity ↔ toxicity** — the bias problem in numbers. Toxic-rate among
+comments *mentioning* each identity, vs. the 8 % base rate:
+
+| Identity                  | P(toxic \| mentioned) | lift |
+|---------------------------|----------------------:|-----:|
+| black                     |                  31 % |  3.9× |
+| homosexual_gay_or_lesbian |                  28 % |  3.5× |
+| white                     |                  28 % |  3.5× |
+| muslim                    |                  23 % |  2.8× |
+| transgender               |                  21 % |  2.7× |
+
+A bag-of-words classifier that fires on these tokens looks accurate and
+fails BPSN catastrophically. **Decision** → adopt the official Jigsaw
+bias-aware metric with `p = -5` power-mean (`metrics.py`) so the worst
+subgroup dominates the score.
+
+![Toxicity rate by identity mention](docs/results/eda/identity_tox_rate.png)
+
+**Identity sparsity & co-mention.** Only 22.4 % of rows are
+identity-annotated; six identities have <100 mentions in train. Top
+co-mention pairs include `male & female`, `black & white`,
+`christian & muslim` — identity is multi-label, not categorical.
+**Decision** → multi-label stratified train/val split on
+(toxic × identity-presence) via `iterstrat` (`data/split.py`), so val gets
+representative coverage of rare identities.
+
+**Comment length.** Chars q95 = 953; whitespace-tokens q95 = 159; after BPE
+the 95th-percentile compresses to ~120 tokens. **Decision** → `max_len=128`
+in `configs/base.yaml`. Going to 256 helps only the longest 5 % at ~4×
+attention compute.
+
+**Sub-toxicity correlations with `target`** (Pearson):
+`insult` 0.93 · `obscene` 0.49 · `identity_attack` 0.45 ·
+`severe_toxicity` 0.39 · `threat` 0.29 · `sexual_explicit` 0.25.
+**Decision** → `insult` is essentially a synonym; the rest are independent
+axes that would make good auxiliary heads (future work).
+
+**Train vs test drift.** Positive rates almost identical (8.00 % vs
+7.94 %). Most identity mention rates within ±10 %; the only large outliers
+are `intellectual_or_learning_disability` (2.4× more frequent in test) and
+`atheist` (1.9×). **Decision** → no class-prior correction needed;
+rare-identity per-AUCs will be noisy but not systematically biased.
+
+**Annotator counts.** Median 4 toxicity annotators per row, so `target`
+granularity ≈ 0.25 — comments with `target = 0.5` had a coin-flip among
+4 annotators. **Decision** → keep all training rows for now, but flag
+sample-weighting by `toxicity_annotator_count` as the highest-ROI label-noise
+mitigation in §10.
+
+**Time span.** 2015-09-29 to 2017-11-11; 76 % of rows from 2017. The
+dataset is a frozen historical snapshot — flagged in §11 limitations.
 
 ## 3. Splitting strategy
 

@@ -88,7 +88,15 @@ python -m pip install -e ".[dev]"
 export WANDB_API_KEY="<your_key>"
 export WANDB_PROJECT="toxic-classifier"
 # To run without W&B: export WANDB_MODE=disabled
+
+# 4. (Optional) reproduce the dataset analysis — writes CSVs + plots to docs/results/eda/
+make eda
 ```
+
+The committed EDA artefacts under [`docs/results/eda/`](docs/results/eda/)
+already cover schema, target distribution, identity coverage + bias signal,
+length, train/test drift, and 4 PNG plots — see `report.md` §2 for the
+distilled findings that drove modelling decisions.
 
 ---
 

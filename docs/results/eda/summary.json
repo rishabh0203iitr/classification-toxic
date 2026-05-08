@@ -1,0 +1,14 @@
+{
+  "n_train": 1804874,
+  "n_test": 194640,
+  "n_columns": 45,
+  "pos_rate_train": 0.0799690172277954,
+  "pos_rate_test": 0.07936703658035348,
+  "median_chars": 202,
+  "q95_chars": 953,
+  "median_words": 35,
+  "q95_words": 159,
+  "n_identity_cols": 24,
+  "rows_with_identity_annotations_train": 405130,
+  "rows_with_identity_annotations_test": 42870
+}
