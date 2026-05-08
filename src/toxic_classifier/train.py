@@ -96,7 +96,12 @@ def _maybe_init_wandb(cfg: dict) -> object | None:
         import wandb
     except ImportError:
         return None
-    mode = cfg.get("wandb", {}).get("mode") or os.environ.get("WANDB_MODE")
+    # WANDB_MODE env var takes precedence over the config so that ad-hoc
+    # invocations (e.g. WANDB_MODE=disabled python -m toxic_classifier.train ...)
+    # override the project default. Documented in README.
+    env_mode = os.environ.get("WANDB_MODE")
+    cfg_mode = cfg.get("wandb", {}).get("mode")
+    mode = env_mode if env_mode else cfg_mode
     if mode == "disabled":
         return None
     project = cfg.get("wandb", {}).get("project", "toxic-classifier")
