@@ -27,6 +27,8 @@ from scratch (no pretrained weights). The HuggingFace `tokenizers`
 library is used only as a Byte-Pair Encoding (BPE) trainer over the
 Jigsaw training text — the vocabulary is learned from the dataset.
 
+Claude was used as the AI coding assistant for this repo
+
 ## 2. Data analysis
 
 The full reproducible analysis is in [`scripts/eda.py`](scripts/eda.py);
